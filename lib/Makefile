@@ -86,5 +86,9 @@ SKIP_FILE := $(wildcard SKIP-APPLICATIONS)
 SKIP_APPLICATIONS := $(if $(SKIP_FILE),$(shell cat $(SKIP_FILE)))
 SUB_DIRECTORIES := $(filter-out $(SKIP_APPLICATIONS),$(SUB_DIRECTORIES))
 
+ifdef ONLY_DIALYZER
+  SUB_DIRECTORIES := dialyzer
+endif
+
 # ----------------------------------------------------------------------
 include $(ERL_TOP)/make/otp_subdir.mk
