@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2007-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -807,7 +807,7 @@ des_exclusive(_) ->
 %% Are not considered secure any more.
 %%--------------------------------------------------------------------
 rsa_suites({3, 3}) ->
-    rsa_exclusive(3) ++ rsa_exclusive(1) -- [?TLS_RSA_WITH_3DES_EDE_CBC_SHA];
+    rsa_exclusive(3) ++ rsa_exclusive(1);
 rsa_suites({3, 2}) ->
     rsa_exclusive(1);
 rsa_suites({3, 1}) ->

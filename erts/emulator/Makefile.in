@@ -925,36 +925,29 @@ $(OBJDIR)/%.o: nifs/$(ERLANG_OSTYPE)/%.c
 #
 ASMJIT_FLAGS=-DASMJIT_EMBED=1 -DASMJIT_NO_BUILDER=1 -DASMJIT_NO_DEPRECATED=1 -DASMJIT_STATIC=1 -DASMJIT_NO_FOREIGN=1
 
-ifeq ($(JIT_ARCH), arm)
-# Work around a bug in the current beta release causing a linking
-# error.
-ASMJIT_FLAGS+=-DASMJIT_NO_VALIDATION
-endif
-
 ASMJIT_PCH_OBJ=$(TTF_DIR)/asmjit/asmjit.hpp.gch
 ASMJIT_PCH_SRC=$(TTF_DIR)/asmjit/asmjit.hpp
 
 $(OBJDIR)/%.o: beam/jit/%.cpp $(ASMJIT_PCH_OBJ)
-	$(V_CXX) $(ASMJIT_FLAGS) $(INCLUDES)                            \
+	$(V_CXX) $(ASMJIT_FLAGS) $(INCLUDES)                        \
           $(subst -O2, $(GEN_OPT_FLGS), $(CXXFLAGS))                \
           -include $(ASMJIT_PCH_SRC) -c $< -o $@
 
-$(OBJDIR)/%.o: beam/jit/$(JIT_ARCH)/%.cpp beam/jit/$(JIT_ARCH)/beam_asm.hpp \
-	$(ASMJIT_PCH_OBJ)
-	$(V_CXX) $(ASMJIT_FLAGS) $(INCLUDES)                            \
+$(OBJDIR)/%.o: beam/jit/$(JIT_ARCH)/%.cpp beam/jit/$(JIT_ARCH)/beam_asm.hpp $(ASMJIT_PCH_OBJ)
+	$(V_CXX) $(ASMJIT_FLAGS) $(INCLUDES)                        \
           $(subst -O2, $(GEN_OPT_FLGS), $(CXXFLAGS))                \
           -include $(ASMJIT_PCH_SRC) -c $< -o $@
 
 $(OBJDIR)/asmjit/%.o: asmjit/%.cpp $(ASMJIT_PCH_OBJ) $(dir $@)
-	$(V_CXX) $(ASMJIT_FLAGS) $(INCLUDES)                            \
+	$(V_CXX) $(ASMJIT_FLAGS) $(INCLUDES)                        \
           $(subst -O2, $(GEN_OPT_FLGS), $(CXXFLAGS))                \
           -include $(ASMJIT_PCH_SRC) -c $< -o $@
 
 ## The dependency on erl_bif_info.c is in order to trigger a rebuild when
 ## the git sha define on the command line argument changes
 $(ASMJIT_PCH_OBJ): $(ASMJIT_PCH_SRC) $(ASMJIT_TTF_H) beam/erl_bif_info.c
-	$(V_CXX) $(ASMJIT_FLAGS) $(INCLUDES)    	\
-          $(subst -O2, $(GEN_OPT_FLGS), $(CXXFLAGS))    \
+	$(V_CXX) $(ASMJIT_FLAGS) $(INCLUDES)                        \
+          $(subst -O2, $(GEN_OPT_FLGS), $(CXXFLAGS))                \
           -I$(TTF_DIR) -c $< -o $@
 
 ## We copy all asmjit headers into TTF_DIR in order for cross-compilation
@@ -1100,7 +1093,7 @@ endif
 
 
 RUN_OBJS += \
-	$(OBJDIR)/erl_alloc.o		$(OBJDIR)/erl_mtrace.o \
+	$(OBJDIR)/erl_alloc.o \
 	$(OBJDIR)/erl_alloc_util.o	$(OBJDIR)/erl_goodfit_alloc.o \
 	$(OBJDIR)/erl_bestfit_alloc.o	$(OBJDIR)/erl_afit_alloc.o \
 	$(OBJDIR)/erl_init.o \
@@ -1226,7 +1219,6 @@ OS_OBJS +=	$(OBJDIR)/erl_poll.o \
 		$(OBJDIR)/erl_mmap.o  \
 		$(OBJDIR)/erl_osenv.o \
 		$(OBJDIR)/erl_$(ERLANG_OSTYPE)_sys_ddll.o \
-		$(OBJDIR)/erl_mtrace_sys_wrap.o \
 		$(OBJDIR)/erl_sys_common_misc.o \
 		$(OBJDIR)/erl_os_monotonic_time_extender.o
 

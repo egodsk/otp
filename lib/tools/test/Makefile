@@ -24,7 +24,6 @@ MODULES =  \
 	cover_SUITE \
 	eprof_SUITE \
 	emacs_SUITE \
-	emem_SUITE \
 	fprof_SUITE \
 	cprof_SUITE \
 	instrument_SUITE \
@@ -67,7 +66,7 @@ make_emakefile:
 	$(ERL_TOP)/make/make_emakefile $(ERL_COMPILE_FLAGS) -o$(EBIN) $(MODULES)\
 	> $(EMAKEFILE)
 
-tests debug opt: make_emakefile
+tests $(TYPES): make_emakefile
 	erl $(ERL_MAKE_FLAGS) -make
 
 clean:

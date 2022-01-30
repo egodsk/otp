@@ -70,9 +70,6 @@
 /* Type qualifier restrict */
 #undef ERTS_RESTRICT
 
-/* Save compile time? */
-#undef ERTS_SAVED_COMPILE_TIME
-
 /* Define if structure alignment is enough for allocators. If not defined,
    64-bit alignment will be forced. */
 #undef ERTS_STRUCTURE_ALIGNED_ALLOC
@@ -107,7 +104,7 @@
 /* Define if bigendian */
 #undef ETHR_BIGENDIAN
 
-/* Define if gcc wont let you clobber ebx with cmpxchg8b and position
+/* Define if gcc won't let you clobber ebx with cmpxchg8b and position
    independent code */
 #undef ETHR_CMPXCHG8B_PIC_NO_CLOBBER_EBX
 

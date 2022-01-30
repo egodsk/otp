@@ -682,7 +682,7 @@ EMU_THR_DEFS
 EMU_THR_LIBS
 EMU_THR_X_LIBS
 EMU_THR_LIB_NAME
-TYPES
+DEFAULT_TYPES
 DIRTY_SCHEDULER_TEST
 ETHR_X86_SSE2_ASM
 ETHR_THR_LIB_BASE_DIR
@@ -843,7 +843,6 @@ with_dynamic_trace
 enable_vm_probes
 with_assumed_cache_line_size
 enable_systemd
-enable_saved_compile_time
 with_microstate_accounting
 enable_static_nifs
 enable_static_drivers
@@ -1557,18 +1556,16 @@ Optional Features:
                           possible if --with-dynamic-trace is enabled, and
                           then default)
   --enable-systemd        enable systemd support in epmd
-  --disable-saved-compile-time
-                          disable saved compile time
   --enable-static-nifs    link nifs statically. If yes then all nifs in all
                           Erlang/OTP applications will be statically linked
                           into the main binary. It is also possible to give a
                           list of nifs that should be linked statically. The
                           list should be a comma separated and contain the
-                          absolute path to a .a archive for each nif lib
-                          that is to be statically linked. Note that you have
-                          to link any external dependencies, that the nifs have,
-                          to the main binary. So for the crypto nifs
-                          you want to pass LIBS=-lcrypto to configure.
+                          absolute path to a .a archive for each nif that is
+                          to be statically linked. Note that you have to link
+                          any external dependencies, that the nifs have, to
+                          the main binary. So for the crypto nifs you want to
+                          pass LIBS=-lcrypto to configure.
   --enable-static-drivers comma separated list of linked-in drivers to link
                           statically with the main binary. The list should
                           contain the absolute path to a .a archive for each
@@ -1682,7 +1679,7 @@ Some influential environment variables:
   CXX         C++ compiler
   CXXFLAGS    C++ compiler flags
   LD          linker (is often overridden by configure)
-  LDFLAGS     linker flags (can be risky to set since LD may be overriden by
+  LDFLAGS     linker flags (can be risky to set since LD may be overridden by
               configure)
   LIBS        libraries
   DED_LD      linker for Dynamic Erlang Drivers (set all DED_LD* variables or
@@ -3624,6 +3621,8 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
 
+
+
 no_werror_CFLAGS=$(echo " $CFLAGS " | sed 's/ -Werror / /g')
 if test "X $CFLAGS " != "X$no_werror_CFLAGS"; then
    CFLAGS="$no_werror_CFLAGS"
@@ -5167,22 +5166,6 @@ then :
 else $as_nop
   enable_systemd=no
 fi
-
-
-# Check whether --enable-saved-compile-time was given.
-if test ${enable_saved_compile_time+y}
-then :
-  enableval=$enable_saved_compile_time;  case "$enableval" in
-    no) save_compile_time=0 ;;
-    *)  save_compile_time=1 ;;
-  esac
-else $as_nop
-  save_compile_time=1
-fi
-
-
-
-printf "%s\n" "#define ERTS_SAVED_COMPILE_TIME $save_compile_time" >>confdefs.h
 
 
 
@@ -15015,7 +14998,7 @@ if test "X$ETHR_LIB_NAME" = "X"; then
    as_fn_error $? "cannot build emulator since no thread library was found" "$LINENO" 5
 fi
 
-TYPES=opt
+DEFAULT_TYPES="opt"
 
 DIRTY_SCHEDULER_TEST=$enable_dirty_schedulers_test
 
@@ -15259,7 +15242,7 @@ printf %s "checking whether lock counters should be enabled... " >&6; }
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $enable_lock_count" >&5
 printf "%s\n" "$enable_lock_count" >&6; }
 if test "x$enable_lock_count" != "xno"; then
-    TYPES="$TYPES lcnt"
+    DEFAULT_TYPES="$DEFAULT_TYPES lcnt"
 fi
 
 case $host_os in
@@ -25296,7 +25279,7 @@ ac_config_files="$ac_config_files emulator/$host/Makefile:emulator/Makefile.in e
 ac_config_files="$ac_config_files ../make/make_emakefile:../make/make_emakefile.in"
 
 
-ac_config_files="$ac_config_files ../lib/os_mon/c_src/$host/Makefile:../lib/os_mon/c_src/Makefile.in ../lib/runtime_tools/c_src/$host/Makefile:../lib/runtime_tools/c_src/Makefile.in ../lib/tools/c_src/$host/Makefile:../lib/tools/c_src/Makefile.in"
+ac_config_files="$ac_config_files ../lib/os_mon/c_src/$host/Makefile:../lib/os_mon/c_src/Makefile.in ../lib/runtime_tools/c_src/$host/Makefile:../lib/runtime_tools/c_src/Makefile.in"
 
 
 ac_config_files="$ac_config_files ../make/install_dir_data.sh:../make/install_dir_data.sh.in"
@@ -26002,7 +25985,6 @@ do
     "../make/make_emakefile") CONFIG_FILES="$CONFIG_FILES ../make/make_emakefile:../make/make_emakefile.in" ;;
     "../lib/os_mon/c_src/$host/Makefile") CONFIG_FILES="$CONFIG_FILES ../lib/os_mon/c_src/$host/Makefile:../lib/os_mon/c_src/Makefile.in" ;;
     "../lib/runtime_tools/c_src/$host/Makefile") CONFIG_FILES="$CONFIG_FILES ../lib/runtime_tools/c_src/$host/Makefile:../lib/runtime_tools/c_src/Makefile.in" ;;
-    "../lib/tools/c_src/$host/Makefile") CONFIG_FILES="$CONFIG_FILES ../lib/tools/c_src/$host/Makefile:../lib/tools/c_src/Makefile.in" ;;
     "../make/install_dir_data.sh") CONFIG_FILES="$CONFIG_FILES ../make/install_dir_data.sh:../make/install_dir_data.sh.in" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;

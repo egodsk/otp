@@ -2,7 +2,7 @@ dnl Process this file with autoconf to produce a configure script. -*-Autoconf-*
 
 dnl %CopyrightBegin%
 dnl
-dnl Copyright Ericsson AB 1997-2021. All Rights Reserved.
+dnl Copyright Ericsson AB 1997-2022. All Rights Reserved.
 dnl
 dnl Licensed under the Apache License, Version 2.0 (the "License");
 dnl you may not use this file except in compliance with the License.
@@ -285,15 +285,6 @@ AC_ARG_ENABLE(systemd,
 AS_HELP_STRING([--enable-systemd], [enable systemd support in epmd]),
 [],
 [enable_systemd=no])
-
-AC_ARG_ENABLE(saved-compile-time,
-AS_HELP_STRING([--disable-saved-compile-time], [disable saved compile time]),
-[ case "$enableval" in
-    no) save_compile_time=0 ;;
-    *)  save_compile_time=1 ;;
-  esac ], save_compile_time=1)
-
-AC_DEFINE_UNQUOTED(ERTS_SAVED_COMPILE_TIME, $save_compile_time, [Save compile time?])
 
 AC_ARG_WITH(microstate-accounting,
 AS_HELP_STRING([--with-microstate-accounting={yes|extra}],
@@ -1012,7 +1003,7 @@ if test "X$ETHR_LIB_NAME" = "X"; then
    AC_MSG_ERROR([cannot build emulator since no thread library was found])
 fi
 
-TYPES=opt
+DEFAULT_TYPES="opt"
 
 DIRTY_SCHEDULER_TEST=$enable_dirty_schedulers_test
 AC_SUBST(DIRTY_SCHEDULER_TEST)
@@ -1091,7 +1082,7 @@ EOF
 	;;
 
 esac
-AC_SUBST(TYPES)
+AC_SUBST(DEFAULT_TYPES)
 
 AC_CHECK_FUNCS([posix_fadvise closefrom])
 AC_CHECK_HEADERS([linux/falloc.h])
@@ -1178,7 +1169,7 @@ fi
 AC_MSG_CHECKING(whether lock counters should be enabled)
 AC_MSG_RESULT($enable_lock_count)
 if test "x$enable_lock_count" != "xno"; then
-    TYPES="$TYPES lcnt"
+    DEFAULT_TYPES="$DEFAULT_TYPES lcnt"
 fi
 
 case $host_os in
@@ -3608,7 +3599,6 @@ dnl
 AC_CONFIG_FILES([
   ../lib/os_mon/c_src/$host/Makefile:../lib/os_mon/c_src/Makefile.in
   ../lib/runtime_tools/c_src/$host/Makefile:../lib/runtime_tools/c_src/Makefile.in
-  ../lib/tools/c_src/$host/Makefile:../lib/tools/c_src/Makefile.in
   ])
 
 AC_CONFIG_FILES([../make/install_dir_data.sh:../make/install_dir_data.sh.in], [chmod +x ../make/install_dir_data.sh])

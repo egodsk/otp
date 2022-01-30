@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2019-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2019-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -2621,7 +2621,8 @@ check_random_nonce(Config) when is_list(Config) ->
     Randoms = lists:flatten([ssl_test_lib:get_result([Server, Client]) ||
                                 {Server, Client} <- ConnectionPairs]),
     Deltas = [abs(FourBytes - SecsSince) ||
-                 {_Id, {_, <<FourBytes:32, _/binary>>}, SecsSince} <- Randoms],
+                 {_FromPid,
+                  {_Id, {_, <<FourBytes:32, _/binary>>}, SecsSince}} <- Randoms],
     MeanDelta = lists:sum(Deltas) div N,
     case ?config(version, Config) of
         'tlsv1.3' ->

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2019-2020. All Rights Reserved.
+%% Copyright Ericsson AB 2019-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -248,15 +248,40 @@ sni_test(ServerNode, ServerOptions0, ClientOptions, Config) ->
 
 maybe_add_sigalgs(Version, ServerOptions) when Version == 'tlsv1.3';
                                                Version == 'tlsv1.2' ->
-    [{signature_algs, [rsa_pss_rsae_sha512,
-                       rsa_pss_rsae_sha384,
-                       rsa_pss_rsae_sha256]} | ServerOptions];
+    case maybe_add_openssl_sigalgs(Version) of
+        [] ->
+            [{signature_algs, [rsa_pss_rsae_sha512,
+                               rsa_pss_rsae_sha384,
+                               rsa_pss_rsae_sha256,
+                               {sha512, rsa},
+                               {sha384, rsa},
+                               {sha256, rsa},
+                               {sha224, rsa},
+                               {sha, rsa}
+                              ]
+             } | ServerOptions];
+        _ ->
+            [{signature_algs, [rsa_pss_rsae_sha512,
+                               rsa_pss_rsae_sha384,
+                               rsa_pss_rsae_sha256]} | ServerOptions]
+    end;
 maybe_add_sigalgs(_, ServerOptions) ->
     ServerOptions.
 
 maybe_add_openssl_sigalgs(Version) when Version == 'tlsv1.3';
                                         Version == 'tlsv1.2' ->
-    [{sigalgs, "rsa_pss_rsae_sha512:rsa_pss_rsae_sha384:rsa_pss_rsae_sha256"}];
+    case ssl_test_lib:portable_cmd("openssl", ["version"]) of
+        "OpenSSL 1.0" ++  _ ->
+            [];
+        _ ->
+            HelpText = ssl_test_lib:portable_cmd("openssl", ["s_client", "--help"]),
+            case string:str(HelpText, "-sigalgs") of
+                0 ->
+                    [];
+                _ ->
+                    [{sigalgs, "rsa_pss_rsae_sha512:rsa_pss_rsae_sha384:rsa_pss_rsae_sha256"}]
+            end
+    end;
 maybe_add_openssl_sigalgs(_) ->
     [].
 

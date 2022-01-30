@@ -24,7 +24,7 @@ include $(ERL_TOP)/make/$(TARGET)/otp.mk
 # Macros
 # ----------------------------------------------------
 
-SUB_DIRECTORIES = c_src src doc/src examples emacs
+SUB_DIRECTORIES = src doc/src examples emacs
 
 include vsn.mk
 VSN = $(TOOLS_VSN)
@@ -37,5 +37,6 @@ SPECIAL_TARGETS =
 include $(ERL_TOP)/make/otp_subdir.mk
 
 DIA_PLT_APPS=compiler runtime_tools
+TEST_NEEDS_RELEASE=true
 
 include $(ERL_TOP)/make/app_targets.mk
