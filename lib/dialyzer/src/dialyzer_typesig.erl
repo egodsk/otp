@@ -787,6 +787,10 @@ handle_call(Call, DefinedVars, State) ->
       F = cerl:atom_val(Fun),
       A = length(Args),
       MFA = {M, F, A},
+      case MFA of
+        {gen_server,call,2} -> ok;
+        _ -> ok
+      end,
       {State1, ArgVars} = traverse_list(Args, DefinedVars, State),
       case state__lookup_rec_var_in_scope(MFA, State) of
 	error ->
@@ -810,12 +814,27 @@ handle_call(Call, DefinedVars, State) ->
   end.
 
 get_plt_constr(NewMFA, Dst, ArgVars, State) ->
-  MFA = case NewMFA of
-    {gen_server,call,2} -> {test4,beer_func,2};
-    _ -> NewMFA
-  end,
+  Module = State#state.module,
   Plt = state__plt(State),
-  PltRes = dialyzer_plt:lookup(Plt, MFA),
+
+  {MFA, PltRes} = case NewMFA of
+    {gen_server,call,_} ->
+      HandleCallMFA = {Module,handle_call,3},
+      HandleCallPltInfo = dialyzer_plt:lookup(Plt, HandleCallMFA),
+      {value, {ReturnTypesWrapperWrapper, InputTypesWrapper}} = HandleCallPltInfo,
+
+      [InputTypes, _, _] = InputTypesWrapper,
+
+      {_, _, ReturnTypesWrapper, _} = ReturnTypesWrapperWrapper,
+      [_, ReturnTypes, _] = ReturnTypesWrapper,
+
+      GenServerPltRes = {'value', {ReturnTypes, [any, InputTypes]}},
+
+      {HandleCallMFA, GenServerPltRes};
+    _ ->
+      {NewMFA, dialyzer_plt:lookup(Plt, NewMFA)}
+  end,
+
   SCCMFAs = State#state.mfas,
   Contract =
     case lists:member(MFA, SCCMFAs) of
