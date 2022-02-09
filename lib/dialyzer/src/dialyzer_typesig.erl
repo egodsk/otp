@@ -809,7 +809,11 @@ handle_call(Call, DefinedVars, State) ->
       {state__store_conj_lists(MF, sub, [t_module(), t_atom()], State1), Dst}
   end.
 
-get_plt_constr(MFA, Dst, ArgVars, State) ->
+get_plt_constr(NewMFA, Dst, ArgVars, State) ->
+  MFA = case NewMFA of
+    {gen_server,call,2} -> {test4,beer_func,2};
+    _ -> NewMFA
+  end,
   Plt = state__plt(State),
   PltRes = dialyzer_plt:lookup(Plt, MFA),
   SCCMFAs = State#state.mfas,

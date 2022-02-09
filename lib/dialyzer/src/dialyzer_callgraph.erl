@@ -326,6 +326,12 @@ strip_module_deps(ModDeps, StripSet) ->
 -spec finalize(callgraph()) -> {[scc()], callgraph()}.
 
 finalize(#callgraph{digraph = DG} = CG) ->
+    % Condensation is used to extract the SCC's from the directed graph
+    % The result of this (the SCC's) is kept in the Postorder variable
+    % ActiveDG contains information about the DG -> {'e', OutETS, InETS, MapsETS}
+    % OutETS is the functions being called for each function
+    % InETS is the functions that call each function
+    % MapsETS contains mapping from int to name of SCC
   {ActiveDG, Postorder} = condensation(DG),
   {Postorder, CG#callgraph{active_digraph = ActiveDG}}.
 
@@ -778,9 +784,11 @@ to_ps(#callgraph{} = CG, File, Args) ->
   ok.
 
 condensation(G) ->
+    % See comments where this function is called
   {Pid, Ref} = erlang:spawn_monitor(do_condensation(G, self())),
   receive {'DOWN', Ref, process, Pid, Result} ->
       {SCCInts, OutETS, InETS, MapsETS} = Result,
+      % This call maps the ints recevied for the SCC's to the names of the SCC's
       NewSCCs = [ets:lookup_element(MapsETS, SCCInt, 2) || SCCInt <- SCCInts],
       {{'e', OutETS, InETS, MapsETS}, NewSCCs}
   end.
