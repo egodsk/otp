@@ -817,7 +817,7 @@ get_plt_constr(NewMFA, Dst, ArgVars, State) ->
   Module = State#state.module,
   Plt = state__plt(State),
 
-  {MFA, PltRes} = case NewMFA of
+  {BeerHack, MFA, PltRes} = case NewMFA of
     {gen_server,call,_} ->
       HandleCallMFA = {Module,handle_call,3},
       HandleCallPltInfo = dialyzer_plt:lookup(Plt, HandleCallMFA),
@@ -830,9 +830,9 @@ get_plt_constr(NewMFA, Dst, ArgVars, State) ->
 
       GenServerPltRes = {'value', {ReturnTypes, [any, InputTypes]}},
 
-      {HandleCallMFA, GenServerPltRes};
+      {true, HandleCallMFA, GenServerPltRes};
     _ ->
-      {NewMFA, dialyzer_plt:lookup(Plt, NewMFA)}
+      {false, NewMFA, dialyzer_plt:lookup(Plt, NewMFA)}
   end,
 
   SCCMFAs = State#state.mfas,
@@ -850,23 +850,31 @@ get_plt_constr(NewMFA, Dst, ArgVars, State) ->
 				  [PltRetType|PltArgTypes], State)
       end;
     {value, #contract{args = GenArgs} = C} ->
-      {RetType, ArgCs} =
-	case PltRes of
-	  none ->
-	    {?mk_fun_var(fun(Map) ->
-			     ArgTypes = lookup_type_list(ArgVars, Map),
-                             get_contract_return(C, ArgTypes)
-			 end, ArgVars), GenArgs};
-	  {value, {PltRetType, PltArgTypes}} ->
-	    %% Need to combine the contract with the success typing.
-	    {?mk_fun_var(
-		fun(Map) ->
-		    ArgTypes = lookup_type_list(ArgVars, Map),
-                    CRet = get_contract_return(C, ArgTypes),
-		    t_inf(CRet, PltRetType)
-		end, ArgVars),
-	     [t_inf(X, Y) || {X, Y} <- lists:zip(GenArgs, PltArgTypes)]}
-	end,
+      {RetType, ArgCs} = case PltRes of
+        none ->
+          {?mk_fun_var(fun(Map) ->
+                   ArgTypes = lookup_type_list(ArgVars, Map),
+                               get_contract_return(C, ArgTypes)
+               end, ArgVars), GenArgs};
+        {value, {PltRetType, PltArgTypes}} ->
+          %% Need to combine the contract with the success typing.
+          NewGenArgs = case BeerHack of
+            true ->
+              [WhatWeNeed, _, _] = GenArgs,
+              [any, WhatWeNeed];
+            _ -> GenArgs
+          end,
+
+          Test = C#contract{args = NewGenArgs},
+
+          {?mk_fun_var(
+          fun(Map) ->
+              ArgTypes = lookup_type_list(ArgVars, Map),
+                      CRet = get_contract_return(Test, ArgTypes),
+              t_inf(CRet, PltRetType)
+          end, ArgVars),
+           [t_inf(X, Y) || {X, Y} <- lists:zip(NewGenArgs, PltArgTypes)]}
+      end,
       state__store_conj_lists([Dst|ArgVars], sub, [RetType|ArgCs], State)
   end.
 
