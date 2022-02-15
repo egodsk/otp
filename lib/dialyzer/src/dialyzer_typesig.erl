@@ -844,9 +844,9 @@ get_plt_constr(NewMFA, Dst, ArgVars, State) ->
   case Contract of
     none ->
       case PltRes of
-	none -> State;
-	{value, {PltRetType, PltArgTypes}} ->
-	  state__store_conj_lists([Dst|ArgVars], sub,
+	    none -> State;
+	    {value, {PltRetType, PltArgTypes}} ->
+	      state__store_conj_lists([Dst|ArgVars], sub,
 				  [PltRetType|PltArgTypes], State)
       end;
     {value, #contract{args = GenArgs} = C} ->
@@ -865,15 +865,39 @@ get_plt_constr(NewMFA, Dst, ArgVars, State) ->
             _ -> GenArgs
           end,
 
-          Test = C#contract{args = NewGenArgs},
+          NewContract = C#contract{args = NewGenArgs},
+          % Update C#contract{contracts} to follow the "correct" schema for handle:call
 
-          {?mk_fun_var(
-          fun(Map) ->
-              ArgTypes = lookup_type_list(ArgVars, Map),
-                      CRet = get_contract_return(Test, ArgTypes),
-              t_inf(CRet, PltRetType)
-          end, ArgVars),
-           [t_inf(X, Y) || {X, Y} <- lists:zip(NewGenArgs, PltArgTypes)]}
+          {
+            ?mk_fun_var(
+              fun(Map) ->
+                OldArgTypes = lookup_type_list(ArgVars, Map),
+
+                % If we are doing gen_server:call, the argtypes should be what we know followed by anything
+                % E.g. [any, {my_server_api, Arg}] --> [{my_server_api, Arg}, any, any]
+                % Has to e.g. match the spec handle_call({my_api_server, integer()}, _From, _State)
+                % Where we do not care about _From and _State
+                ArgTypes = case BeerHack of
+                  true ->
+                    [_, T] = OldArgTypes,
+                    [T, any, any];
+                  false -> OldArgTypes
+                end,
+
+                OldCRet = get_contract_return(NewContract, ArgTypes),
+
+                CRet = case BeerHack of
+                  true ->
+                     {_, _, [_, RetTypeHandleCall, _], _} = OldCRet,
+                     RetTypeHandleCall;
+                  false -> OldCRet
+                end,
+
+                t_inf(CRet, PltRetType)
+              end, ArgVars
+            ),
+            [t_inf(X, Y) || {X, Y} <- lists:zip(NewGenArgs, PltArgTypes)]
+          }
       end,
       state__store_conj_lists([Dst|ArgVars], sub, [RetType|ArgCs], State)
   end.
