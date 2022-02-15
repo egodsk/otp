@@ -820,17 +820,28 @@ get_plt_constr(NewMFA, Dst, ArgVars, State) ->
   {BeerHack, MFA, PltRes} = case NewMFA of
     {gen_server,call,_} ->
       HandleCallMFA = {Module,handle_call,3},
+
+      % Genserver:Call is being used in more scenarios than just our discrepancies.
+      % We therefore have to make sure that when nothing is found in the PLT, we do what Dialyzer normally does.
       HandleCallPltInfo = dialyzer_plt:lookup(Plt, HandleCallMFA),
-      {value, {ReturnTypesWrapperWrapper, InputTypesWrapper}} = HandleCallPltInfo,
+      io:fwrite("her her her~n"),
+      io:format("~p~n", [NewMFA]),
+      io:format("~p~n", [Module]),
+      io:format("~p~n", [HandleCallMFA]),
+      io:format("~p~n", [HandleCallPltInfo]),
+      case HandleCallPltInfo of
+        none -> {false, NewMFA, dialyzer_plt:lookup(Plt, NewMFA)};
+        {value, {ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+          [InputTypes, _, _] = InputTypesWrapper,
+          io:format("ReturnTypesWrapperWrapper: ~p~n", [ReturnTypesWrapperWrapper]),
+          {_, _, ReturnTypesWrapper, _} = ReturnTypesWrapperWrapper,
+          io:format("ReturnTypesWrapper: ~p~n", [ReturnTypesWrapper]),
+          [_, ReturnTypes, _] = ReturnTypesWrapper,
 
-      [InputTypes, _, _] = InputTypesWrapper,
+          GenServerPltRes = {'value', {ReturnTypes, [any, InputTypes]}},
 
-      {_, _, ReturnTypesWrapper, _} = ReturnTypesWrapperWrapper,
-      [_, ReturnTypes, _] = ReturnTypesWrapper,
-
-      GenServerPltRes = {'value', {ReturnTypes, [any, InputTypes]}},
-
-      {true, HandleCallMFA, GenServerPltRes};
+          {true, HandleCallMFA, GenServerPltRes}
+      end;
     _ ->
       {false, NewMFA, dialyzer_plt:lookup(Plt, NewMFA)}
   end,
