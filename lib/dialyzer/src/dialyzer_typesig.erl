@@ -848,8 +848,8 @@ get_plt_constr(NewMFA, Dst, ArgVars, State) ->
           ReturnTypes = case ReturnTypeTag of
               tuple ->
                 case ReturnTypesWrapper of
-                  {reply, ReplyType, _} -> ReplyType;
-                  {reply, ReplyType, _, _} -> ReplyType;
+                  [_Reply, ReplyType, _] -> ReplyType;
+                  [_Reply, ReplyType, _, _] -> ReplyType;
                   _ -> any
                 end;
               tuple_set ->
