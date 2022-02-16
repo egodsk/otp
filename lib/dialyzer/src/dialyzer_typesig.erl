@@ -813,70 +813,128 @@ handle_call(Call, DefinedVars, State) ->
       {state__store_conj_lists(MF, sub, [t_module(), t_atom()], State1), Dst}
   end.
 
-get_plt_constr(NewMFA, Dst, ArgVars, State) ->
-  Module = State#state.module,
+get_plt_constr({'Elixir.GenServer', call, _} = InputMFA, Dst, ArgVars, State) ->
+  get_plt_constr_gen_server(InputMFA, Dst, ArgVars, State);
+get_plt_constr({gen_server, call, _} = InputMFA, Dst, ArgVars, State) ->
+  get_plt_constr_gen_server(InputMFA, Dst, ArgVars, State);
+get_plt_constr(MFA, Dst, ArgVars, State) ->
   Plt = state__plt(State),
-
-  {BeerHack, MFA, PltRes, BeerArity} = case NewMFA of
-    % TODO: How do we handle that Elixir has a different MFA for calling gen_server?
-    {BeerModule,call,Arity} when BeerModule =:= gen_server; BeerModule =:= 'Elixir.GenServer' ->
-      HandleCallMFA = {Module,handle_call,3},
-
-      % Genserver:Call is being used in more scenarios than just our discrepancies.
-      % We therefore have to make sure that when nothing is found in the PLT, we do what Dialyzer normally does.
-      HandleCallPltInfo = dialyzer_plt:lookup(Plt, HandleCallMFA),
-      %io:fwrite("her her her~n"),
-      %io:format("~p~n", [NewMFA]),
-      %io:format("~p~n", [Module]),
-      %io:format("~p~n", [HandleCallMFA]),
-      %io:format("~p~n", [HandleCallPltInfo]),
-      case HandleCallPltInfo of
-        none -> {false, NewMFA, dialyzer_plt:lookup(Plt, NewMFA), Arity};
-        {value, {ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
-          % io:format("~p~n", [Arity]),
-          % Get the 3 arguments to handle_call.
-          % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
-          % then we are pulling out {my_server_api, Arg}
-          [InputTypes, _, _] = InputTypesWrapper,
-
-          % Get the return types of the handle_call.
-          % ReturnTypeTag --> type of the returned element, can be tuple or tuple_set
-          % If handle_call returns only a single type then it is a tuple
-          % If handle_call returns multiple different types then it is a tuple_set
-          %
-          % ReturnTypesWrapper --> either a single tuple or a list of tuples (tuple_set)
-          {_, ReturnTypeTag, ReturnTypesWrapper, _} = ReturnTypesWrapperWrapper,
-          ReturnTypes = case ReturnTypeTag of
-              tuple ->
-                case ReturnTypesWrapper of
-                  [_Reply, ReplyType, _] -> ReplyType;
-                  [_Reply, ReplyType, _, _] -> ReplyType;
-                  _ -> any
-                end;
-              tuple_set ->
-                % Loop over all tuples in the tuple_set
-                % Perform the logic from the tuple case above
-                any
-          end,
-
-          %io:format("ReturnTypesWrapperWrapper: ~p~n", [ReturnTypesWrapperWrapper]),
-          %io:format("ReturnTypesWrapper: ~p~n", [ReturnTypesWrapper]),
-          %io:format("ReturnTypesWrapper length: ~p~n", [length(ReturnTypesWrapper)]),
-
-          GenServerInput = case Arity of
-            2 -> [any, InputTypes];
-            3 -> [any, InputTypes, any]
-          end,
-
-          GenServerPltRes = {'value', {ReturnTypes, GenServerInput}},
-
-          {true, HandleCallMFA, GenServerPltRes, Arity}
-      end;
-    _ ->
-      {false, NewMFA, dialyzer_plt:lookup(Plt, NewMFA), nil}
-  end,
-
+  PltRes = dialyzer_plt:lookup(Plt, MFA),
   SCCMFAs = State#state.mfas,
+  get_plt_constr_contract(MFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs).
+
+get_plt_constr_gen_server({_, _, Arity} = InputMFA, Dst, ArgVars, State) ->
+  % TODO: How do we handle that Elixir has a different MFA for calling gen_server?
+  Plt = state__plt(State),
+  SCCMFAs = State#state.mfas,
+
+  Module = State#state.module,
+  HandleCallMFA = {Module, handle_call, 3},
+  case dialyzer_plt:lookup(Plt, HandleCallMFA) of
+    none ->
+      % gen_server:call is being used in more scenarios than just our discrepancies.
+      % We therefore have to make sure that when nothing is found in the PLT, we do what Dialyzer normally does.
+      PltRes = dialyzer_plt:lookup(Plt, InputMFA),
+      get_plt_constr_contract(InputMFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs);
+    {value, {ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+      % Get the 3 arguments to handle_call.
+      % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
+      % then we are pulling out {my_server_api, Arg}
+      [InputTypes, _, _] = InputTypesWrapper,
+
+      % Get the return types of the handle_call.
+      % ReturnTypeTag --> type of the returned element, can be tuple or tuple_set
+      % If handle_call returns only a single type then it is a tuple
+      % If handle_call returns multiple different types then it is a tuple_set
+      % ReturnTypesWrapper --> either a single tuple or a list of tuples (tuple_set)
+      {_, ReturnTypeTag, ReturnTypesWrapper, _} = ReturnTypesWrapperWrapper,
+      ReturnTypes =
+        case ReturnTypeTag of
+          tuple ->
+            case ReturnTypesWrapper of
+              [_Reply, ReplyType, _] -> ReplyType;
+              [_Reply, ReplyType, _, _] -> ReplyType;
+              _ -> any
+            end;
+          tuple_set ->
+            % TODO: handle tuple_set - for now --> easy peacy return any :D
+            % Loop over all tuples in the tuple_set
+            % Perform the logic from the tuple case above
+            any
+        end,
+
+      GenServerInput =
+        case Arity of
+          2 -> [any, InputTypes];
+          3 -> [any, InputTypes, any]
+        end,
+
+      Contract =
+        case lists:member(HandleCallMFA, SCCMFAs) of
+          true -> none;
+          false -> dialyzer_plt:lookup_contract(Plt, HandleCallMFA)
+        end,
+
+      case Contract of
+        none ->
+          % PltRes is always of type {'value', {.., ..}} defined above
+          state__store_conj_lists([Dst | ArgVars], sub, [ReturnTypes | GenServerInput], State);
+        {value, #contract{args = GenArgs} = C} ->
+          % PltRes is always of type {'value', {.., ..}} defined above
+          %% Need to combine the contract with the success typing.
+          % Payload to handle_call --> e.g. {my_api_server, Arg}
+          [RequestType, _, _] = GenArgs,
+          % Based on the number of arguments to gen_server:call we need to make sure we match that number
+          NewGenArgs =
+            case Arity of
+              % [ServerRef, Request] --> [pid(), {my_api_server, Arg}]
+              2 -> [any, RequestType];
+              % [ServerRef, Request, Timeout] --> [pid(), {my_api_server, Arg}, ?]
+              3 -> [any, RequestType, any]
+            end,
+
+          {RetType, ArgCs} = {
+            ?mk_fun_var(
+              fun(Map) ->
+                OldArgTypes = lookup_type_list(ArgVars, Map),
+
+                % If we are doing gen_server:call, the arg types should be what we know followed by anything
+                % E.g. [any, {my_server_api, Arg}] --> [{my_server_api, Arg}, any, any]
+                % Has to e.g. match the spec handle_call({my_api_server, integer()}, _From, _State)
+                % Where we do not care about _From and _State
+                % We match on OldArgTypes to handle the Arity of the call
+                ArgTypes =
+                  case OldArgTypes of
+                    [_, RequestType1] -> [RequestType1, any, any];
+                    [_, RequestType1, _] -> [RequestType1, any, any]
+                  end,
+
+                % _Tag will probably also be either tuple or tuple_set. Both needs to be handled
+                {_C, Tag, ContractReturnType, _Qualifier} = get_contract_return(C#contract{args = NewGenArgs}, ArgTypes),
+                CRet =
+                  case Tag of
+                    tuple ->
+                      case ContractReturnType of
+                        [_Reply1, ContractReplyType, _] -> ContractReplyType;
+                        [_Reply1, ContractReplyType, _, _] -> ContractReplyType;
+                        _ -> any
+                      end;
+                    % TODO: Handle tuple set - for now --> easy peacy return any :D
+                    % Loop over all tuples in the tuple_set
+                    % Perform the logic from the tuple case above
+                    tuple_set -> any
+                  end,
+
+                t_inf(CRet, ReturnTypes)
+              end, ArgVars
+            ),
+            [t_inf(X, Y) || {X, Y} <- lists:zip(NewGenArgs, GenServerInput)]
+          },
+          state__store_conj_lists([Dst | ArgVars], sub, [RetType | ArgCs], State)
+      end
+  end.
+
+get_plt_constr_contract(MFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs) ->
   Contract =
     case lists:member(MFA, SCCMFAs) of
       true -> none;
@@ -885,97 +943,29 @@ get_plt_constr(NewMFA, Dst, ArgVars, State) ->
   case Contract of
     none ->
       case PltRes of
-	    none -> State;
-	    {value, {PltRetType, PltArgTypes}} ->
-	      state__store_conj_lists([Dst|ArgVars], sub,
-				  [PltRetType|PltArgTypes], State)
+        none -> State;
+        {value, {PltRetType, PltArgTypes}} ->
+          state__store_conj_lists([Dst|ArgVars], sub,
+            [PltRetType|PltArgTypes], State)
       end;
     {value, #contract{args = GenArgs} = C} ->
-      {RetType, ArgCs} = case PltRes of
-        none ->
-          {?mk_fun_var(fun(Map) ->
-                   ArgTypes = lookup_type_list(ArgVars, Map),
-                               get_contract_return(C, ArgTypes)
-               end, ArgVars), GenArgs};
-        {value, {PltRetType, PltArgTypes}} ->
-          %% Need to combine the contract with the success typing.
-          NewGenArgs = case BeerHack of
-            true ->
-              % Payload to handle_call --> e.g. {my_api_server, Arg}
-              [RequestType, _, _] = GenArgs,
-              % Based on the number of arguments to gen_server:call we need to make sure we match that number
-              case BeerArity of
-                % [ServerRef, Request] --> [pid(), {my_api_server, Arg}]
-                2 -> [any, RequestType];
-                % [ServerRef, Request, Timeout] --> [pid(), {my_api_server, Arg}, ?]
-                3 -> [any, RequestType, any]
-              end;
-            _ -> GenArgs
-          end,
-
-          NewContract = C#contract{args = NewGenArgs},
-
-          if
-            length(NewGenArgs) =/= length(PltArgTypes) ->
-              io:format("Wtf1...: ~p~n", [NewGenArgs]),
-              io:format("Wtf2...: ~p~n", [PltArgTypes]),
-              io:format("Wtf3...: ~p~n", [GenArgs]);
-            true -> ok
-          end,
-
-          {
-            ?mk_fun_var(
+      {RetType, ArgCs} =
+        case PltRes of
+          none ->
+            {?mk_fun_var(fun(Map) ->
+              ArgTypes = lookup_type_list(ArgVars, Map),
+              get_contract_return(C, ArgTypes)
+                         end, ArgVars), GenArgs};
+          {value, {PltRetType, PltArgTypes}} ->
+            %% Need to combine the contract with the success typing.
+            {?mk_fun_var(
               fun(Map) ->
-                OldArgTypes = lookup_type_list(ArgVars, Map),
-
-                % If we are doing gen_server:call, the argtypes should be what we know followed by anything
-                % E.g. [any, {my_server_api, Arg}] --> [{my_server_api, Arg}, any, any]
-                % Has to e.g. match the spec handle_call({my_api_server, integer()}, _From, _State)
-                % Where we do not care about _From and _State
-                ArgTypes = case BeerHack of
-                  true ->
-                    case OldArgTypes of
-                      [_, RequestType1] -> [RequestType1, any, any];
-                      [_, RequestType1, _] -> [RequestType1, any, any]
-                    end;
-                  false -> OldArgTypes
-                end,
-
-                OldCRet = get_contract_return(NewContract, ArgTypes),
-
-                CRet = case BeerHack of
-                  true ->
-                    % TODO: We need to match on all possible contracts of handle_call
-                    % https://www.erlang.org/doc/man/gen_server.html#Module:handle_call-3
-                    % e.g.
-                    % {reply,Reply,NewState} | {reply,Reply,NewState,Timeout}| {reply,Reply,NewState,hibernate}
-                    % | {reply,Reply,NewState,{continue,Continue}} | {noreply,NewState} | {noreply,NewState,Timeout}
-                    % | {noreply,NewState,hibernate} | {noreply,NewState,{continue,Continue}}
-                    % | {stop,Reason,Reply,NewState} | {stop,Reason,NewState}
-
-                    % _Tag will probably also be either tuple or tuple_set. Both needs to be handled
-                    {_C, Tag, ContractReturnType, _Qualifier} = OldCRet,
-                    case Tag of
-                      tuple ->
-                        case ContractReturnType of
-                          [_Reply1, ContractReplyType, _] -> ContractReplyType;
-                          [_Reply1, ContractReplyType, _, _] -> ContractReplyType;
-                          _ -> any
-                        end;
-                      % TODO: Handle tuple set
-                      % Loop over all tuples in the tuple_set
-                      % Perform the logic from the tuple case above
-                      tuple_set -> any
-                    end;
-                  false -> OldCRet
-                end,
-
+                ArgTypes = lookup_type_list(ArgVars, Map),
+                CRet = get_contract_return(C, ArgTypes),
                 t_inf(CRet, PltRetType)
-              end, ArgVars
-            ),
-            [t_inf(X, Y) || {X, Y} <- lists:zip(NewGenArgs, PltArgTypes)]
-          }
-      end,
+              end, ArgVars),
+              [t_inf(X, Y) || {X, Y} <- lists:zip(GenArgs, PltArgTypes)]}
+        end,
       state__store_conj_lists([Dst|ArgVars], sub, [RetType|ArgCs], State)
   end.
 
