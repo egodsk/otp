@@ -817,33 +817,62 @@ get_plt_constr(NewMFA, Dst, ArgVars, State) ->
   Module = State#state.module,
   Plt = state__plt(State),
 
-  {BeerHack, MFA, PltRes} = case NewMFA of
-    {gen_server,call,_} ->
+  {BeerHack, MFA, PltRes, BeerArity} = case NewMFA of
+    {gen_server,call,Arity} ->
       HandleCallMFA = {Module,handle_call,3},
 
       % Genserver:Call is being used in more scenarios than just our discrepancies.
       % We therefore have to make sure that when nothing is found in the PLT, we do what Dialyzer normally does.
       HandleCallPltInfo = dialyzer_plt:lookup(Plt, HandleCallMFA),
-      io:fwrite("her her her~n"),
-      io:format("~p~n", [NewMFA]),
-      io:format("~p~n", [Module]),
-      io:format("~p~n", [HandleCallMFA]),
-      io:format("~p~n", [HandleCallPltInfo]),
+      %io:fwrite("her her her~n"),
+      %io:format("~p~n", [NewMFA]),
+      %io:format("~p~n", [Module]),
+      %io:format("~p~n", [HandleCallMFA]),
+      %io:format("~p~n", [HandleCallPltInfo]),
       case HandleCallPltInfo of
-        none -> {false, NewMFA, dialyzer_plt:lookup(Plt, NewMFA)};
+        none -> {false, NewMFA, dialyzer_plt:lookup(Plt, NewMFA), Arity};
         {value, {ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+          % io:format("~p~n", [Arity]),
+          % Get the 3 arguments to handle_call.
+          % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
+          % then we are pulling out {my_server_api, Arg}
           [InputTypes, _, _] = InputTypesWrapper,
-          io:format("ReturnTypesWrapperWrapper: ~p~n", [ReturnTypesWrapperWrapper]),
-          {_, _, ReturnTypesWrapper, _} = ReturnTypesWrapperWrapper,
-          io:format("ReturnTypesWrapper: ~p~n", [ReturnTypesWrapper]),
-          [_, ReturnTypes, _] = ReturnTypesWrapper,
 
-          GenServerPltRes = {'value', {ReturnTypes, [any, InputTypes]}},
+          % Get the return types of the handle_call.
+          % ReturnTypeTag --> type of the returned element, can be tuple or tuple_set
+          % If handle_call returns only a single type then it is a tuple
+          % If handle_call returns multiple different types then it is a tuple_set
+          %
+          % ReturnTypesWrapper --> either a single tuple or a list of tuples (tuple_set)
+          {_, ReturnTypeTag, ReturnTypesWrapper, _} = ReturnTypesWrapperWrapper,
+          ReturnTypes = case ReturnTypeTag of
+              tuple ->
+                case ReturnTypesWrapper of
+                  {reply, ReplyType, _} -> ReplyType;
+                  {reply, ReplyType, _, _} -> ReplyType;
+                  _ -> any
+                end;
+              tuple_set ->
+                % Loop over all tuples in the tuple_set
+                % Perform the logic from the tuple case above
+                any
+          end,
 
-          {true, HandleCallMFA, GenServerPltRes}
+          %io:format("ReturnTypesWrapperWrapper: ~p~n", [ReturnTypesWrapperWrapper]),
+          %io:format("ReturnTypesWrapper: ~p~n", [ReturnTypesWrapper]),
+          %io:format("ReturnTypesWrapper length: ~p~n", [length(ReturnTypesWrapper)]),
+
+          GenServerInput = case Arity of
+            2 -> [any, InputTypes];
+            3 -> [any, InputTypes, any]
+          end,
+
+          GenServerPltRes = {'value', {ReturnTypes, GenServerInput}},
+
+          {true, HandleCallMFA, GenServerPltRes, Arity}
       end;
     _ ->
-      {false, NewMFA, dialyzer_plt:lookup(Plt, NewMFA)}
+      {false, NewMFA, dialyzer_plt:lookup(Plt, NewMFA), nil}
   end,
 
   SCCMFAs = State#state.mfas,
@@ -871,13 +900,27 @@ get_plt_constr(NewMFA, Dst, ArgVars, State) ->
           %% Need to combine the contract with the success typing.
           NewGenArgs = case BeerHack of
             true ->
-              [WhatWeNeed, _, _] = GenArgs,
-              [any, WhatWeNeed];
+              % Payload to handle_call --> e.g. {my_api_server, Arg}
+              [RequestType, _, _] = GenArgs,
+              % Based on the number of arguments to gen_server:call we need to make sure we match that number
+              case BeerArity of
+                % [ServerRef, Request] --> [pid(), {my_api_server, Arg}]
+                2 -> [any, RequestType];
+                % [ServerRef, Request, Timeout] --> [pid(), {my_api_server, Arg}, ?]
+                3 -> [any, RequestType, any]
+              end;
             _ -> GenArgs
           end,
 
           NewContract = C#contract{args = NewGenArgs},
-          % Update C#contract{contracts} to follow the "correct" schema for handle:call
+
+          if
+            length(NewGenArgs) =/= length(PltArgTypes) ->
+              io:format("Wtf1...: ~p~n", [NewGenArgs]),
+              io:format("Wtf2...: ~p~n", [PltArgTypes]),
+              io:format("Wtf3...: ~p~n", [GenArgs]);
+            true -> ok
+          end,
 
           {
             ?mk_fun_var(
@@ -890,8 +933,10 @@ get_plt_constr(NewMFA, Dst, ArgVars, State) ->
                 % Where we do not care about _From and _State
                 ArgTypes = case BeerHack of
                   true ->
-                    [_, T] = OldArgTypes,
-                    [T, any, any];
+                    case OldArgTypes of
+                      [_, RequestType1] -> [RequestType1, any, any];
+                      [_, RequestType1, _] -> [RequestType1, any, any]
+                    end;
                   false -> OldArgTypes
                 end,
 
@@ -899,8 +944,28 @@ get_plt_constr(NewMFA, Dst, ArgVars, State) ->
 
                 CRet = case BeerHack of
                   true ->
-                     {_, _, [_, RetTypeHandleCall, _], _} = OldCRet,
-                     RetTypeHandleCall;
+                    % TODO: We need to match on all possible contracts of handle_call
+                    % https://www.erlang.org/doc/man/gen_server.html#Module:handle_call-3
+                    % e.g.
+                    % {reply,Reply,NewState} | {reply,Reply,NewState,Timeout}| {reply,Reply,NewState,hibernate}
+                    % | {reply,Reply,NewState,{continue,Continue}} | {noreply,NewState} | {noreply,NewState,Timeout}
+                    % | {noreply,NewState,hibernate} | {noreply,NewState,{continue,Continue}}
+                    % | {stop,Reason,Reply,NewState} | {stop,Reason,NewState}
+
+                    % _Tag will probably also be either tuple or tuple_set. Both needs to be handled
+                    {_C, Tag, ContractReturnType, _Qualifier} = OldCRet,
+                    case Tag of
+                      tuple ->
+                        case ContractReturnType of
+                          {reply, ContractReplyType, _} -> ContractReplyType;
+                          {reply, ContractReplyType, _, _} -> ContractReplyType;
+                          _ -> any
+                        end;
+                      % TODO: Handle tuple set
+                      % Loop over all tuples in the tuple_set
+                      % Perform the logic from the tuple case above
+                      tuple_set -> any
+                    end;
                   false -> OldCRet
                 end,
 
