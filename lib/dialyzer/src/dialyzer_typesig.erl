@@ -957,8 +957,8 @@ get_plt_constr(NewMFA, Dst, ArgVars, State) ->
                     case Tag of
                       tuple ->
                         case ContractReturnType of
-                          {reply, ContractReplyType, _} -> ContractReplyType;
-                          {reply, ContractReplyType, _, _} -> ContractReplyType;
+                          [_Reply1, ContractReplyType, _] -> ContractReplyType;
+                          [_Reply1, ContractReplyType, _, _] -> ContractReplyType;
                           _ -> any
                         end;
                       % TODO: Handle tuple set
