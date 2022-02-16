@@ -818,7 +818,8 @@ get_plt_constr(NewMFA, Dst, ArgVars, State) ->
   Plt = state__plt(State),
 
   {BeerHack, MFA, PltRes, BeerArity} = case NewMFA of
-    {gen_server,call,Arity} ->
+    % TODO: How do we handle that Elixir has a different MFA for calling gen_server?
+    {BeerModule,call,Arity} when BeerModule =:= gen_server; BeerModule =:= 'Elixir.GenServer' ->
       HandleCallMFA = {Module,handle_call,3},
 
       % Genserver:Call is being used in more scenarios than just our discrepancies.
