@@ -813,9 +813,7 @@ handle_call(Call, DefinedVars, State) ->
       {state__store_conj_lists(MF, sub, [t_module(), t_atom()], State1), Dst}
   end.
 
-get_plt_constr({'Elixir.GenServer', call, _} = InputMFA, Dst, ArgVars, State) ->
-  get_plt_constr_gen_server(InputMFA, Dst, ArgVars, State);
-get_plt_constr({gen_server, call, _} = InputMFA, Dst, ArgVars, State) ->
+get_plt_constr({P, call, _} = InputMFA, Dst, ArgVars, State) when P =:= gen_server; P =:= 'Elixir.GenServer' ->
   get_plt_constr_gen_server(InputMFA, Dst, ArgVars, State);
 get_plt_constr(MFA, Dst, ArgVars, State) ->
   Plt = state__plt(State),

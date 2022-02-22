@@ -343,14 +343,30 @@ compile_init_result() -> {[], []}.
 -spec add_to_result(file:filename(), one_file_result(), compile_result(),
 		    compile_init_data()) -> compile_result().
 
+add_genserver_handle_call_edges([], Acc) -> Acc;
+add_genserver_handle_call_edges([{{M, _F, _A} = MFA, {P, call, _}} = H | T], Acc) when P =:= gen_server; P =:= 'Elixir.GenServer' ->
+  add_genserver_handle_call_edges(T, [{MFA, {M, handle_call, 3}}, H | Acc]);
+add_genserver_handle_call_edges([H | T], Acc) -> add_genserver_handle_call_edges(T, [H | Acc]).
+
 add_to_result(File, NewData, {Failed, Mods}, InitData) ->
   case NewData of
     {error, Reason} ->
-      {[{File, Reason}|Failed], Mods};
-    {ok, V, E, Mod} ->
+      {[{File, Reason} | Failed], Mods};
+    {ok, V, InitEdges, Mod} ->
+      HandleCallExistsPred =
+        fun(V1) ->
+          case V1 of
+            {_M, handle_call, 3} -> true;
+            _ -> false
+          end
+        end,
+      E = case lists:any(HandleCallExistsPred, V) of
+            true -> add_genserver_handle_call_edges(InitEdges, []);
+            _ -> InitEdges
+          end,
       Callgraph = InitData#compile_init.callgraph,
       dialyzer_callgraph:add_edges(E, V, Callgraph),
-      {Failed, [Mod|Mods]}
+      {Failed, [Mod | Mods]}
   end.
 
 -spec start_compilation(file:filename(), compile_init_data()) ->
