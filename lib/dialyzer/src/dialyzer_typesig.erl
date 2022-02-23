@@ -814,14 +814,73 @@ handle_call(Call, DefinedVars, State) ->
   end.
 
 get_plt_constr({P, call, _} = InputMFA, Dst, ArgVars, State) when P =:= gen_server; P =:= 'Elixir.GenServer' ->
-  get_plt_constr_gen_server(InputMFA, Dst, ArgVars, State);
+  get_plt_constr_gen_server_handle_call(InputMFA, Dst, ArgVars, State);
+get_plt_constr({P, cast, _} = InputMFA, Dst, ArgVars, State) when P =:= gen_server; P =:= 'Elixir.GenServer' ->
+  get_plt_constr_gen_server_handle_cast(InputMFA, Dst, ArgVars, State);
 get_plt_constr(MFA, Dst, ArgVars, State) ->
   Plt = state__plt(State),
   PltRes = dialyzer_plt:lookup(Plt, MFA),
   SCCMFAs = State#state.mfas,
   get_plt_constr_contract(MFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs).
 
-get_plt_constr_gen_server({_, _, Arity} = InputMFA, Dst, ArgVars, State) ->
+get_plt_constr_gen_server_handle_cast(InputMFA, Dst, ArgVars, State) ->
+  Plt = state__plt(State),
+  SCCMFAs = State#state.mfas,
+
+  Module = State#state.module,
+  HandleCallMFA = {Module, handle_cast, 2},
+  case dialyzer_plt:lookup(Plt, HandleCallMFA) of
+    none ->
+      % gen_server:call is being used in more scenarios than just our discrepancies.
+      % We therefore have to make sure that when nothing is found in the PLT, we do what Dialyzer normally does.
+      PltRes = dialyzer_plt:lookup(Plt, InputMFA),
+      get_plt_constr_contract(InputMFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs);
+    {value, {_ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+      % Get the 3 arguments to handle_call.
+      % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
+      % then we are pulling out {my_server_api, Arg}
+      [InputTypes, _] = InputTypesWrapper,
+
+      % Get the return types of the handle_call.
+      % ReturnTypeTag --> type of the returned element, can be tuple or tuple_set
+      % If handle_call returns only a single type then it is a tuple
+      % If handle_call returns multiple different types then it is a tuple_set
+      % ReturnTypesWrapper --> either a single tuple or a list of tuples (tuple_set)
+      ReturnTypes = {c,atom,[ok],unknown},
+      GenServerInput = [any, InputTypes],
+
+      Contract =
+        case lists:member(HandleCallMFA, SCCMFAs) of
+          true -> none;
+          false -> dialyzer_plt:lookup_contract(Plt, HandleCallMFA)
+        end,
+
+      case Contract of
+        none ->
+          % PltRes is always of type {'value', {.., ..}} defined above
+          state__store_conj_lists([Dst | ArgVars], sub, [ReturnTypes | GenServerInput], State);
+        {value, #contract{args = GenArgs} = _C} ->
+          % PltRes is always of type {'value', {.., ..}} defined above
+          %% Need to combine the contract with the success typing.
+          % Payload to handle_call --> e.g. {my_api_server, Arg}
+          [RequestType, _] = GenArgs,
+          % Based on the number of arguments to gen_server:call we need to make sure we match that number
+          NewGenArgs = [any, RequestType],
+
+          {RetType, ArgCs} = {
+            ?mk_fun_var(
+              fun(_Map) ->
+                CRet = {c,atom,[ok],unknown},
+                t_inf(CRet, ReturnTypes)
+              end, ArgVars
+            ),
+            [t_inf(X, Y) || {X, Y} <- lists:zip(NewGenArgs, GenServerInput)]
+          },
+          state__store_conj_lists([Dst | ArgVars], sub, [RetType | ArgCs], State)
+      end
+  end.
+
+get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, State) ->
   % TODO: How do we handle that Elixir has a different MFA for calling gen_server?
   Plt = state__plt(State),
   SCCMFAs = State#state.mfas,

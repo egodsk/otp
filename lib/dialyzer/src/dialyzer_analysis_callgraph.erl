@@ -348,6 +348,11 @@ add_genserver_handle_call_edges([{{M, _F, _A} = MFA, {P, call, _}} = H | T], Acc
   add_genserver_handle_call_edges(T, [{MFA, {M, handle_call, 3}}, H | Acc]);
 add_genserver_handle_call_edges([H | T], Acc) -> add_genserver_handle_call_edges(T, [H | Acc]).
 
+add_genserver_handle_cast_edges([], Acc) -> Acc;
+add_genserver_handle_cast_edges([{{M, _F, _A} = MFA, {P, cast, _}} = H | T], Acc) when P =:= gen_server; P =:= 'Elixir.GenServer' ->
+  add_genserver_handle_cast_edges(T, [{MFA, {M, handle_cast, 2}}, H | Acc]);
+add_genserver_handle_cast_edges([H | T], Acc) -> add_genserver_handle_cast_edges(T, [H | Acc]).
+
 add_to_result(File, NewData, {Failed, Mods}, InitData) ->
   case NewData of
     {error, Reason} ->
@@ -360,9 +365,20 @@ add_to_result(File, NewData, {Failed, Mods}, InitData) ->
             _ -> false
           end
         end,
-      E = case lists:any(HandleCallExistsPred, V) of
+      E1 = case lists:any(HandleCallExistsPred, V) of
             true -> add_genserver_handle_call_edges(InitEdges, []);
             _ -> InitEdges
+          end,
+      HandleCastExistsPred =
+        fun(V1) ->
+          case V1 of
+            {_M, handle_cast, 2} -> true;
+            _ -> false
+          end
+        end,
+      E = case lists:any(HandleCastExistsPred, V) of
+            true -> add_genserver_handle_cast_edges(E1, []);
+            _ -> E1
           end,
       Callgraph = InitData#compile_init.callgraph,
       dialyzer_callgraph:add_edges(E, V, Callgraph),
