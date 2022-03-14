@@ -391,6 +391,33 @@ traverse_list([], Map, State, Acc) ->
 %% Special instructions
 %%
 
+contract_return_type({gen_server, call, _}, C) ->
+  fun(FunArgs) ->
+    R = case FunArgs of
+          [_, RT] -> dialyzer_contracts:get_contract_return(C, [RT, any, any]);
+          [_, RT, _] -> dialyzer_contracts:get_contract_return(C, [RT, any, any])
+        end,
+
+    % _Tag will probably also be either tuple or tuple_set. Both needs to be handled
+    {_C, Tag, ContractReturnType, _Qualifier} = R,
+    case Tag of
+      tuple ->
+        case ContractReturnType of
+          [_Reply1, ContractReplyType, _] -> ContractReplyType;
+          [_Reply1, ContractReplyType, _, _] -> ContractReplyType;
+          _ -> any
+        end;
+      % TODO: Handle tuple set - for now --> easy peacy return any :D
+      % Loop over all tuples in the tuple_set
+      % Perform the logic from the tuple case above
+      tuple_set -> any
+    end
+  end;
+contract_return_type(_, C) ->
+  fun(FunArgs) ->
+    dialyzer_contracts:get_contract_return(C, FunArgs)
+  end.
+
 handle_apply(Tree, Map, State) ->
   Args = cerl:apply_args(Tree),
   Op = cerl:apply_op(Tree),
@@ -490,9 +517,7 @@ handle_apply_or_call([{TypeOfApply, {Fun, Sig, Contr, LocalRet}}|Left],
   {CArgs, CRange} =
     case Contr of
       {value, #contract{args = As} = C} ->
-	{As, fun(FunArgs) ->
-		 dialyzer_contracts:get_contract_return(C, FunArgs)
-	     end};
+	{As, contract_return_type(Fun, C)};
       none -> GenSig
     end,
   {BifArgs, BifRange} =
@@ -3483,6 +3508,75 @@ state__lookup_call_site(Tree, #state{callgraph = Callgraph}) ->
 
 state__fun_info(external, #state{}) ->
   external;
+state__fun_info({gen_server, call, Arity} = MFA, #state{plt = PLT, module = Module}) ->
+  HandleCallMFA = {Module, handle_call, 3},
+  case dialyzer_plt:lookup(PLT, HandleCallMFA) of
+    none ->
+      {MFA,
+        dialyzer_plt:lookup(PLT, MFA),
+        dialyzer_plt:lookup_contract(PLT, MFA),
+        t_any()};
+    {value, {ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+      % Get the 3 arguments to handle_call.
+      % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
+      % then we are pulling out {my_server_api, Arg}
+      [InputTypes, _, _] = InputTypesWrapper,
+      _Abe = dialyzer_plt:lookup(PLT, MFA),
+      _Hest = dialyzer_plt:lookup_contract(PLT, {'aaaa2', 'my_api', 2}),
+
+      % Get the return types of the handle_call.
+      % ReturnTypeTag --> type of the returned element, can be tuple or tuple_set
+      % If handle_call returns only a single type then it is a tuple
+      % If handle_call returns multiple different types then it is a tuple_set
+      % ReturnTypesWrapper --> either a single tuple or a list of tuples (tuple_set)
+      {_, ReturnTypeTag, ReturnTypesWrapper, _} = ReturnTypesWrapperWrapper,
+      ReturnTypes =
+        case ReturnTypeTag of
+          tuple ->
+            case ReturnTypesWrapper of
+              [_Reply, ReplyType, _] -> ReplyType;
+              [_Reply, ReplyType, _, _] -> ReplyType;
+              _ -> any
+            end;
+          tuple_set ->
+            % TODO: handle tuple_set - for now --> easy peacy return any :D
+            % Loop over all tuples in the tuple_set
+            % Perform the logic from the tuple case above
+            any;
+          _ -> any
+        end,
+
+      GenServerInput =
+        case Arity of
+          2 -> [any, InputTypes];
+          3 -> [any, InputTypes, any]
+        end,
+
+      Contract = dialyzer_plt:lookup_contract(PLT, HandleCallMFA),
+      NewContract = case Contract of
+                      none ->
+                        Contract;
+                      {value, #contract{args = GenArgs} = C} ->
+                        % contract{
+                        % {value, #contract{contracts = ?, args = first element of current args, forms = ?}}
+                        [RequestType, _, _] = GenArgs,
+                        % Based on the number of arguments to gen_server:call we need to make sure we match that number
+                        NewGenArgs =
+                          case Arity of
+                            % [ServerRef, Request] --> [pid(), {my_api_server, Arg}]
+                            2 -> [any, RequestType];
+                            % [ServerRef, Request, Timeout] --> [pid(), {my_api_server, Arg}, ?]
+                            3 -> [any, RequestType, any]
+                          end,
+
+                        {'value', C#contract{args = NewGenArgs}}
+                    end,
+
+      {MFA,
+        {'value', {ReturnTypes, GenServerInput}},
+        NewContract,
+        t_any()}
+  end;
 state__fun_info({_, _, _} = MFA, #state{plt = PLT}) ->
   {MFA,
    dialyzer_plt:lookup(PLT, MFA),
