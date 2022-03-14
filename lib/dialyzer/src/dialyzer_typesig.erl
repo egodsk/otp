@@ -917,7 +917,8 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
             % TODO: handle tuple_set - for now --> easy peacy return any :D
             % Loop over all tuples in the tuple_set
             % Perform the logic from the tuple case above
-            any
+            any;
+          _ -> any
         end,
 
       GenServerInput =

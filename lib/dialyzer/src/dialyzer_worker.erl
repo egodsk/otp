@@ -35,7 +35,7 @@
 
 -include("dialyzer.hrl").
 
-%% -define(DEBUG, true).
+-define(DEBUG, true).
 
 -ifdef(DEBUG).
 -define(debug(X__, Y__), io:format(X__, Y__)).
@@ -98,7 +98,13 @@ loop(running, #state{mode = 'compile'} = State) ->
 loop(running, #state{mode = 'warnings'} = State) ->
   request_activation(State),
   ?debug("Warning: ~s\n",[State#state.job]),
+  io:fwrite("PETER!!!\n"),
+  io:fwrite(State#state.job),
   Result = collect_warnings(State),
+  case Result of
+    [] -> ok;
+    _ -> ok
+  end,
   report_to_coordinator(Result, State);
 loop(running, #state{mode = Mode} = State) when
     Mode =:= 'typesig'; Mode =:= 'dataflow' ->

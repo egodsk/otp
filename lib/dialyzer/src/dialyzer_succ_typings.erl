@@ -37,7 +37,7 @@
 
 -export_type([typesig_init_data/0, dataflow_init_data/0, warnings_init_data/0]).
 
-%%-define(DEBUG, true).
+-define(DEBUG, true).
 
 -ifdef(DEBUG).
 -define(debug(X__, Y__), io:format(X__, Y__)).
@@ -261,7 +261,7 @@ refine_one_module(M, {CodeServer, Callgraph, Plt, _Solvers}) ->
   case reached_fixpoint(FunTypes, DecoratedFunTypes) of
     true -> [];
     {false, NotFixpoint} ->
-      ?debug("Not fixpoint\n", []),
+      ?debug("Not fixpoint ABE!!\n", []),
       Plt = insert_into_plt(orddict:from_list(NotFixpoint), Callgraph, Plt),
       [FunLbl || {FunLbl,_Type} <- NotFixpoint]
   end.
