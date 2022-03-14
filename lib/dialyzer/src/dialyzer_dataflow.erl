@@ -485,6 +485,7 @@ handle_apply_or_call([{TypeOfApply, {Fun, Sig, Contr, LocalRet}} | Left],
   AnyArgs = [Any || _ <- Args],
   GenSig = {AnyArgs, fun(_) -> t_any() end},
   case Fun of
+    % Beer was here
     {gen_server, call, _} -> ok;
     _ -> ok
   end,
@@ -3535,6 +3536,26 @@ state__fun_info({gen_server, call, Arity} = MFA, #state{plt = PLT, module = Modu
           2 -> [any, InputTypes];
           3 -> [any, InputTypes, any]
         end,
+
+      Contract = dialyzer_plt:lookup_contract(PLT, HandleCallMFA),
+      _NewContract = case Contract of
+        none ->
+          Contract;
+        {value, #contract{args = GenArgs} = C} ->
+          % contract{
+          % {value, #contract{contracts = ?, args = first element of current args, forms = ?}}
+          [RequestType, _, _] = GenArgs,
+          % Based on the number of arguments to gen_server:call we need to make sure we match that number
+          NewGenArgs =
+            case Arity of
+              % [ServerRef, Request] --> [pid(), {my_api_server, Arg}]
+              2 -> [any, RequestType];
+              % [ServerRef, Request, Timeout] --> [pid(), {my_api_server, Arg}, ?]
+              3 -> [any, RequestType, any]
+            end,
+
+          {'value', C#contract{args = NewGenArgs}}
+      end,
 
       {MFA,
         {'value', {ReturnTypes, GenServerInput}},
