@@ -388,6 +388,33 @@ traverse_list([], Map, State, Acc) ->
 %% Special instructions
 %%
 
+contract_return_type({gen_server, call, _}, C) ->
+  fun(FunArgs) ->
+    R = case FunArgs of
+          [_, RT] -> dialyzer_contracts:get_contract_return(C, [RT, any, any]);
+          [_, RT, _] -> dialyzer_contracts:get_contract_return(C, [RT, any, any])
+        end,
+
+    % _Tag will probably also be either tuple or tuple_set. Both needs to be handled
+    {_C, Tag, ContractReturnType, _Qualifier} = R,
+    case Tag of
+      tuple ->
+        case ContractReturnType of
+          [_Reply1, ContractReplyType, _] -> ContractReplyType;
+          [_Reply1, ContractReplyType, _, _] -> ContractReplyType;
+          _ -> any
+        end;
+      % TODO: Handle tuple set - for now --> easy peacy return any :D
+      % Loop over all tuples in the tuple_set
+      % Perform the logic from the tuple case above
+      tuple_set -> any
+    end
+  end;
+contract_return_type(_, C) ->
+  fun(FunArgs) ->
+    dialyzer_contracts:get_contract_return(C, FunArgs)
+  end.
+
 handle_apply(Tree, Map, State) ->
   Args = cerl:apply_args(Tree),
   Op = cerl:apply_op(Tree),
@@ -484,17 +511,10 @@ handle_apply_or_call([{TypeOfApply, {Fun, Sig, Contr, LocalRet}} | Left],
   Any = t_any(),
   AnyArgs = [Any || _ <- Args],
   GenSig = {AnyArgs, fun(_) -> t_any() end},
-  case Fun of
-    % Beer was here
-    {gen_server, call, _} -> ok;
-    _ -> ok
-  end,
   {CArgs, CRange} =
     case Contr of
       {value, #contract{args = As} = C} ->
-        {As, fun(FunArgs) ->
-          dialyzer_contracts:get_contract_return(C, FunArgs)
-             end};
+        {As, contract_return_type(Fun, C)};
       none -> GenSig
     end,
   {BifArgs, BifRange} =
@@ -3538,28 +3558,28 @@ state__fun_info({gen_server, call, Arity} = MFA, #state{plt = PLT, module = Modu
         end,
 
       Contract = dialyzer_plt:lookup_contract(PLT, HandleCallMFA),
-      _NewContract = case Contract of
-        none ->
-          Contract;
-        {value, #contract{args = GenArgs} = C} ->
-          % contract{
-          % {value, #contract{contracts = ?, args = first element of current args, forms = ?}}
-          [RequestType, _, _] = GenArgs,
-          % Based on the number of arguments to gen_server:call we need to make sure we match that number
-          NewGenArgs =
-            case Arity of
-              % [ServerRef, Request] --> [pid(), {my_api_server, Arg}]
-              2 -> [any, RequestType];
-              % [ServerRef, Request, Timeout] --> [pid(), {my_api_server, Arg}, ?]
-              3 -> [any, RequestType, any]
-            end,
+      NewContract = case Contract of
+                      none ->
+                        Contract;
+                      {value, #contract{args = GenArgs} = C} ->
+                        % contract{
+                        % {value, #contract{contracts = ?, args = first element of current args, forms = ?}}
+                        [RequestType, _, _] = GenArgs,
+                        % Based on the number of arguments to gen_server:call we need to make sure we match that number
+                        NewGenArgs =
+                          case Arity of
+                            % [ServerRef, Request] --> [pid(), {my_api_server, Arg}]
+                            2 -> [any, RequestType];
+                            % [ServerRef, Request, Timeout] --> [pid(), {my_api_server, Arg}, ?]
+                            3 -> [any, RequestType, any]
+                          end,
 
-          {'value', C#contract{args = NewGenArgs}}
-      end,
+                        {'value', C#contract{args = NewGenArgs}}
+                    end,
 
       {MFA,
         {'value', {ReturnTypes, GenServerInput}},
-        dialyzer_plt:lookup_contract(PLT, MFA),
+        NewContract,
         t_any()}
   end;
 state__fun_info({_, _, _} = MFA, #state{plt = PLT}) ->
