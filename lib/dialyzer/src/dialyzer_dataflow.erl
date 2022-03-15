@@ -401,16 +401,9 @@ contract_return_type({gen_server, call, _}, C) ->
     % _Tag will probably also be either tuple or tuple_set. Both needs to be handled
     {_C, Tag, ContractReturnType, _Qualifier} = R,
     case Tag of
-      tuple ->
-        case ContractReturnType of
-          [_Reply1, ContractReplyType, _] -> ContractReplyType;
-          [_Reply1, ContractReplyType, _, _] -> ContractReplyType;
-          _ -> any
-        end;
-      % TODO: Handle tuple set - for now --> easy peacy return any :D
-      % Loop over all tuples in the tuple_set
-      % Perform the logic from the tuple case above
-      tuple_set -> any
+      tuple -> get_tuple_return_type(ContractReturnType);
+      tuple_set -> get_tuple_set_return_type(ContractReturnType);
+      _ -> any
     end
   end;
 contract_return_type(_, C) ->
@@ -3506,6 +3499,19 @@ state__lookup_call_site(Tree, #state{callgraph = Callgraph}) ->
   Label = get_label(Tree),
   dialyzer_callgraph:lookup_call_site(Label, Callgraph).
 
+get_tuple_return_type(ReturnType) ->
+  case ReturnType of
+    [{c, atom, [reply], _}, ReplyType, _] -> ReplyType;
+    [{c, atom, [reply], _}, ReplyType, _, _] -> ReplyType;
+    [{c, atom, [stop], _}, _, ReplyType, _] -> ReplyType;
+    _ -> any
+  end.
+
+get_tuple_set_return_type(ReturnTypeList) ->
+  Elements = lists:flatten([E || {_Arity, E} <- ReturnTypeList]),
+  [RFirst | RRest] = [get_tuple_return_type(H) || {_C, _Tag, H, _Unknown} <- Elements],
+  lists:foldl(fun(X, Acc) -> erl_types:t_sup(X, Acc) end, RFirst, RRest).
+
 state__fun_info(external, #state{}) ->
   external;
 state__fun_info({gen_server, call, Arity} = MFA, #state{plt = PLT, module = Module}) ->
@@ -3521,8 +3527,6 @@ state__fun_info({gen_server, call, Arity} = MFA, #state{plt = PLT, module = Modu
       % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
       % then we are pulling out {my_server_api, Arg}
       [InputTypes, _, _] = InputTypesWrapper,
-      _Abe = dialyzer_plt:lookup(PLT, MFA),
-      _Hest = dialyzer_plt:lookup_contract(PLT, {'aaaa2', 'my_api', 2}),
 
       % Get the return types of the handle_call.
       % ReturnTypeTag --> type of the returned element, can be tuple or tuple_set
@@ -3532,17 +3536,8 @@ state__fun_info({gen_server, call, Arity} = MFA, #state{plt = PLT, module = Modu
       {_, ReturnTypeTag, ReturnTypesWrapper, _} = ReturnTypesWrapperWrapper,
       ReturnTypes =
         case ReturnTypeTag of
-          tuple ->
-            case ReturnTypesWrapper of
-              [_Reply, ReplyType, _] -> ReplyType;
-              [_Reply, ReplyType, _, _] -> ReplyType;
-              _ -> any
-            end;
-          tuple_set ->
-            % TODO: handle tuple_set - for now --> easy peacy return any :D
-            % Loop over all tuples in the tuple_set
-            % Perform the logic from the tuple case above
-            any;
+          tuple -> get_tuple_return_type(ReturnTypesWrapper);
+          tuple_set -> get_tuple_set_return_type(ReturnTypesWrapper);
           _ -> any
         end,
 
