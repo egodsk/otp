@@ -3514,7 +3514,7 @@ get_tuple_set_return_type(ReturnTypeList) ->
 
 state__fun_info(external, #state{}) ->
   external;
-state__fun_info({gen_server, call, Arity} = MFA, #state{plt = PLT, module = Module}) ->
+state__fun_info({M, call, Arity} = MFA, #state{plt = PLT, module = Module}) when M =:= 'gen_server'; M =:= 'Elixir.GenServer' ->
   HandleCallMFA = {Module, handle_call, 3},
   case dialyzer_plt:lookup(PLT, HandleCallMFA) of
     none ->
@@ -3572,6 +3572,43 @@ state__fun_info({gen_server, call, Arity} = MFA, #state{plt = PLT, module = Modu
         NewContract,
         t_any()}
   end;
+
+state__fun_info({M, cast, _Arity} = MFA, #state{plt = PLT, module = Module}) when M =:= 'gen_server'; M =:= 'Elixir.GenServer' ->
+  HandleCastMFA = {Module, handle_cast, 2},
+  case dialyzer_plt:lookup(PLT, HandleCastMFA) of
+    none ->
+      {MFA,
+        dialyzer_plt:lookup(PLT, MFA),
+        dialyzer_plt:lookup_contract(PLT, MFA),
+        t_any()};
+    {value, {_ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+      % Get the 2 arguments to handle_cast.
+      % E.g. if handle_cast looks like handle_cast({my_server_api, Arg}, _State)
+      % then we are pulling out {my_server_api, Arg}
+      [InputTypes, _] = InputTypesWrapper,
+
+      ReturnTypes = {c, atom, [ok], unknown},
+      GenServerInput = [any, InputTypes],
+
+      Contract = dialyzer_plt:lookup_contract(PLT, HandleCastMFA),
+      NewContract = case Contract of
+                      none ->
+                        Contract;
+                      {value, #contract{args = GenArgs} = C} ->
+                        % contract{
+                        % {value, #contract{contracts = ?, args = first element of current args, forms = ?}}
+                        [RequestType, _] = GenArgs,
+                        NewGenArgs = [any, RequestType],
+
+                        {'value', C#contract{args = NewGenArgs}}
+                    end,
+
+      {MFA,
+        {'value', {ReturnTypes, GenServerInput}},
+        NewContract,
+        t_any()}
+  end;
+
 state__fun_info({_, _, _} = MFA, #state{plt = PLT}) ->
   {MFA,
    dialyzer_plt:lookup(PLT, MFA),
