@@ -398,12 +398,15 @@ contract_return_type({gen_server, call, _}, C) ->
           [_, RT, _] -> dialyzer_contracts:get_contract_return(C, [RT, any, any])
         end,
 
-    % _Tag will probably also be either tuple or tuple_set. Both needs to be handled
-    {_C, Tag, ContractReturnType, _Qualifier} = R,
-    case Tag of
-      tuple -> get_tuple_return_type(ContractReturnType);
-      tuple_set -> get_tuple_set_return_type(ContractReturnType);
-      _ -> any
+    case R of
+      none -> none;
+      _ -> % _Tag will probably also be either tuple or tuple_set. Both needs to be handled
+        {_C, Tag, ContractReturnType, _Qualifier} = R,
+        case Tag of
+          tuple -> get_tuple_return_type(ContractReturnType);
+          tuple_set -> get_tuple_set_return_type(ContractReturnType);
+          _ -> any
+        end
     end
   end;
 contract_return_type(_, C) ->

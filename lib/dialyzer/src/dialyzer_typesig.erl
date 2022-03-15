@@ -811,9 +811,9 @@ handle_call(Call, DefinedVars, State) ->
 
 get_tuple_return_type(ReturnType) ->
   case ReturnType of
-    [reply, ReplyType, _] -> ReplyType;
-    [reply, ReplyType, _, _] -> ReplyType;
-    [stop, _, ReplyType, _] -> ReplyType;
+    [{c, atom, [reply], _}, ReplyType, _] -> ReplyType;
+    [{c, atom, [reply], _}, ReplyType, _, _] -> ReplyType;
+    [{c, atom, [stop], _}, _, ReplyType, _] -> ReplyType;
     _ -> any
   end.
 
