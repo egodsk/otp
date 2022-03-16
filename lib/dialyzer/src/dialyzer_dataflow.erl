@@ -391,14 +391,14 @@ traverse_list([], Map, State, Acc) ->
 %% Special instructions
 %%
 
-contract_return_type({gen_server, call, _}, C) ->
+contract_return_type({M, call, _}, C) when M =:= 'gen_server'; M =:= 'Elixir.GenServer' ->
   fun(FunArgs) ->
     R = case FunArgs of
           [_, RT] -> dialyzer_contracts:get_contract_return(C, [RT, any, any]);
           [_, RT, _] -> dialyzer_contracts:get_contract_return(C, [RT, any, any])
         end,
 
-    case R of
+    ReturnType = case R of
       {_C, Tag, ContractReturnType, _Qualifier} ->
         case Tag of
           tuple -> get_tuple_return_type(ContractReturnType);
@@ -406,7 +406,14 @@ contract_return_type({gen_server, call, _}, C) ->
           _ -> any
         end;
       _ -> R
-    end
+    end,
+
+    case ReturnType of
+      any -> dialyzer_statistics:increment_counter_any_contract(?MODULE);
+      _ -> ok
+    end,
+
+    ReturnType
   end;
 contract_return_type(_, C) ->
   fun(FunArgs) ->
