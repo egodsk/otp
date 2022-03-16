@@ -841,9 +841,16 @@ get_plt_constr_gen_server_handle_cast(InputMFA, Dst, ArgVars, State) ->
     none ->
       % gen_server:call is being used in more scenarios than just our discrepancies.
       % We therefore have to make sure that when nothing is found in the PLT, we do what Dialyzer normally does.
+
+      % Get statistics on lookup not found
+      dialyzer_statistics:increment_counter_cast_lookup_failed(),
+
       PltRes = dialyzer_plt:lookup(Plt, InputMFA),
       get_plt_constr_contract(InputMFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs);
     {value, {_ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+      % Increment handle_cast counter
+      dialyzer_statistics:increment_counter_cast(),
+
       % Get the 3 arguments to handle_call.
       % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
       % then we are pulling out {my_server_api, Arg}
@@ -898,9 +905,16 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
     none ->
       % gen_server:call is being used in more scenarios than just our discrepancies.
       % We therefore have to make sure that when nothing is found in the PLT, we do what Dialyzer normally does.
+
+      % Increment handle_call lookup failed counter
+      dialyzer_statistics:increment_counter_call_lookup_failed(),
+
       PltRes = dialyzer_plt:lookup(Plt, InputMFA),
       get_plt_constr_contract(InputMFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs);
     {value, {ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+      % Increment handle_call  counter
+      dialyzer_statistics:increment_counter_call(),
+
       % Get the 3 arguments to handle_call.
       % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
       % then we are pulling out {my_server_api, Arg}
@@ -918,6 +932,12 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
           tuple_set -> get_tuple_set_return_type(ReturnTypesWrapper);
           _ -> any
         end,
+
+      % Get statistics on any reached in success typing
+      case ReturnTypes of
+        any -> dialyzer_statistics:increment_counter_any_succ();
+        _ -> ok
+      end,
 
       GenServerInput =
         case Arity of
@@ -973,6 +993,12 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
                     tuple_set -> get_tuple_set_return_type(ContractReturnType);
                     _ -> any
                   end,
+
+                % Get statistics on any reached in contract
+                case CRet of
+                  any -> dialyzer_statistics:increment_counter_any_contract();
+                  _ -> ok
+                end,
 
                 t_inf(CRet, ReturnTypes)
               end, ArgVars

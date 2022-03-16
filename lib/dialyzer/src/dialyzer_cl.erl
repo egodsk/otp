@@ -399,6 +399,7 @@ do_analysis(Files, Options, Plt, PltInfo) ->
   Return = cl_loop(State3),
   {T2, _} = statistics(wall_clock),
   report_elapsed_time(T1, T2, Options),
+  io:format("~p~n", [ets:tab2list(dialyzer_statistics_table)]),
   Return.
 
 convert_analysis_type(plt_check, true)   -> succ_typings;
