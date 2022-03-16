@@ -399,14 +399,13 @@ contract_return_type({gen_server, call, _}, C) ->
         end,
 
     case R of
-      none -> none;
-      _ -> % _Tag will probably also be either tuple or tuple_set. Both needs to be handled
-        {_C, Tag, ContractReturnType, _Qualifier} = R,
+      {_C, Tag, ContractReturnType, _Qualifier} ->
         case Tag of
           tuple -> get_tuple_return_type(ContractReturnType);
           tuple_set -> get_tuple_set_return_type(ContractReturnType);
           _ -> any
-        end
+        end;
+      _ -> R
     end
   end;
 contract_return_type(_, C) ->
@@ -3521,11 +3520,15 @@ state__fun_info({M, call, Arity} = MFA, #state{plt = PLT, module = Module}) when
   HandleCallMFA = {Module, handle_call, 3},
   case dialyzer_plt:lookup(PLT, HandleCallMFA) of
     none ->
+      dialyzer_statistics:increment_counter_call_lookup_failed(),
+
       {MFA,
         dialyzer_plt:lookup(PLT, MFA),
         dialyzer_plt:lookup_contract(PLT, MFA),
         t_any()};
     {value, {ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+      dialyzer_statistics:increment_counter_call(),
+
       % Get the 3 arguments to handle_call.
       % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
       % then we are pulling out {my_server_api, Arg}
@@ -3543,6 +3546,12 @@ state__fun_info({M, call, Arity} = MFA, #state{plt = PLT, module = Module}) when
           tuple_set -> get_tuple_set_return_type(ReturnTypesWrapper);
           _ -> any
         end,
+
+      % Get statistics on any reached in contract
+      case ReturnTypes of
+        any -> dialyzer_statistics:increment_counter_any_contract();
+        _ -> ok
+      end,
 
       GenServerInput =
         case Arity of
@@ -3580,11 +3589,15 @@ state__fun_info({M, cast, _Arity} = MFA, #state{plt = PLT, module = Module}) whe
   HandleCastMFA = {Module, handle_cast, 2},
   case dialyzer_plt:lookup(PLT, HandleCastMFA) of
     none ->
+      dialyzer_statistics:increment_counter_cast_lookup_failed(),
+
       {MFA,
         dialyzer_plt:lookup(PLT, MFA),
         dialyzer_plt:lookup_contract(PLT, MFA),
         t_any()};
     {value, {_ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+      dialyzer_statistics:increment_counter_cast(),
+
       % Get the 2 arguments to handle_cast.
       % E.g. if handle_cast looks like handle_cast({my_server_api, Arg}, _State)
       % then we are pulling out {my_server_api, Arg}
