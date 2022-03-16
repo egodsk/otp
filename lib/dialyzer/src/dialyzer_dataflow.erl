@@ -3520,14 +3520,14 @@ state__fun_info({M, call, Arity} = MFA, #state{plt = PLT, module = Module}) when
   HandleCallMFA = {Module, handle_call, 3},
   case dialyzer_plt:lookup(PLT, HandleCallMFA) of
     none ->
-      dialyzer_statistics:increment_counter_call_lookup_failed(),
+      dialyzer_statistics:increment_counter_call_lookup_failed(?MODULE),
 
       {MFA,
         dialyzer_plt:lookup(PLT, MFA),
         dialyzer_plt:lookup_contract(PLT, MFA),
         t_any()};
     {value, {ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
-      dialyzer_statistics:increment_counter_call(),
+      dialyzer_statistics:increment_counter_call(?MODULE),
 
       % Get the 3 arguments to handle_call.
       % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
@@ -3549,7 +3549,7 @@ state__fun_info({M, call, Arity} = MFA, #state{plt = PLT, module = Module}) when
 
       % Get statistics on any reached in contract
       case ReturnTypes of
-        any -> dialyzer_statistics:increment_counter_any_contract();
+        any -> dialyzer_statistics:increment_counter_any_contract(?MODULE);
         _ -> ok
       end,
 
@@ -3589,14 +3589,14 @@ state__fun_info({M, cast, _Arity} = MFA, #state{plt = PLT, module = Module}) whe
   HandleCastMFA = {Module, handle_cast, 2},
   case dialyzer_plt:lookup(PLT, HandleCastMFA) of
     none ->
-      dialyzer_statistics:increment_counter_cast_lookup_failed(),
+      dialyzer_statistics:increment_counter_cast_lookup_failed(?MODULE),
 
       {MFA,
         dialyzer_plt:lookup(PLT, MFA),
         dialyzer_plt:lookup_contract(PLT, MFA),
         t_any()};
     {value, {_ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
-      dialyzer_statistics:increment_counter_cast(),
+      dialyzer_statistics:increment_counter_cast(?MODULE),
 
       % Get the 2 arguments to handle_cast.
       % E.g. if handle_cast looks like handle_cast({my_server_api, Arg}, _State)

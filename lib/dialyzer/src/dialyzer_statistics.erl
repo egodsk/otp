@@ -8,33 +8,52 @@
 -export([stop/0]).
 
 % - for external use (note: calls are Synchronous)
--export([start/0, increment_counter_any_succ/0, increment_counter_any_contract/0, increment_counter_call/0, increment_counter_cast/0,
-  increment_counter_call_lookup_failed/0, increment_counter_cast_lookup_failed/0, get_statistics/0]).
+-export([start/0, increment_counter_any_succ/1, increment_counter_any_contract/1, increment_counter_call/1, increment_counter_cast/1,
+  increment_counter_call_lookup_failed/1, increment_counter_cast_lookup_failed/1, get_statistics/0]).
 
 % Client APIs
--spec increment_counter_any_succ() -> any().
-increment_counter_any_succ() ->
-  gen_server:cast(?MODULE, {increment, any_succ}).
 
--spec increment_counter_any_contract() -> any().
-increment_counter_any_contract() ->
-  gen_server:cast(?MODULE, {increment, any_contract}).
+% Any in success typing
+-spec increment_counter_any_succ(any()) -> any().
+increment_counter_any_succ(dialyzer_typesig) ->
+  gen_server:cast(?MODULE, {increment, any_succ});
+increment_counter_any_succ(dialyzer_dataflow) ->
+  gen_server:cast(?MODULE, {increment, any_succ_dataflow}).
 
--spec increment_counter_call() -> any().
-increment_counter_call() ->
-  gen_server:cast(?MODULE, {increment, call}).
+% Any in contract
+-spec increment_counter_any_contract(any()) -> any().
+increment_counter_any_contract(dialyzer_typesig) ->
+  gen_server:cast(?MODULE, {increment, any_contract});
+increment_counter_any_contract(dialyzer_dataflow) ->
+  gen_server:cast(?MODULE, {increment, any_contract_dataflow}).
 
--spec increment_counter_cast() -> any().
-increment_counter_cast() ->
-  gen_server:cast(?MODULE, {increment, cast}).
+% genserver:call used
+-spec increment_counter_call(any()) -> any().
+increment_counter_call(dialyzer_typesig) ->
+  gen_server:cast(?MODULE, {increment, call});
+increment_counter_call(dialyzer_dataflow) ->
+  gen_server:cast(?MODULE, {increment, call_dataflow}).
 
--spec increment_counter_call_lookup_failed() -> any().
-increment_counter_call_lookup_failed() ->
-  gen_server:cast(?MODULE, {increment, call_lookup_failed}).
+% genserver:cast used
+-spec increment_counter_cast(any()) -> any().
+increment_counter_cast(dialyzer_typesig) ->
+  gen_server:cast(?MODULE, {increment, cast});
+increment_counter_cast(dialyzer_dataflow) ->
+  gen_server:cast(?MODULE, {increment, cast_dataflow}).
 
--spec increment_counter_cast_lookup_failed() -> any().
-increment_counter_cast_lookup_failed() ->
-  gen_server:cast(?MODULE, {increment, cast_lookup_failed}).
+% genserver:call type not found in PLT
+-spec increment_counter_call_lookup_failed(any()) -> any().
+increment_counter_call_lookup_failed(dialyzer_typesig) ->
+  gen_server:cast(?MODULE, {increment, call_lookup_failed});
+increment_counter_call_lookup_failed(dialyzer_dataflow) ->
+  gen_server:cast(?MODULE, {increment, call_lookup_failed_dataflow}).
+
+% genserver:cast type not found in PLT
+-spec increment_counter_cast_lookup_failed(any()) -> any().
+increment_counter_cast_lookup_failed(dialyzer_typesig) ->
+  gen_server:cast(?MODULE, {increment, cast_lookup_failed});
+increment_counter_cast_lookup_failed(dialyzer_dataflow) ->
+  gen_server:cast(?MODULE, {increment, cast_lookup_failed_dataflow}).
 
 -spec get_statistics() -> any().
 get_statistics() ->
@@ -47,12 +66,12 @@ start() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 -spec init(any()) -> any().
 init([]) -> Dictionary = dict:from_list(
   [
-    {any_succ, 0},
-    {any_contract, 0},
-    {call, 0},
-    {cast, 0},
-    {call_lookup_failed, 0},
-    {cast_lookup_failed, 0}
+    {any_succ, 0},{any_succ_dataflow, 0},
+    {any_contract, 0},{any_contract_dataflow, 0},
+    {call, 0},{call_dataflow, 0},
+    {cast, 0},{cast_dataflow, 0},
+    {call_lookup_failed, 0},{call_lookup_failed_dataflow, 0},
+    {cast_lookup_failed, 0},{cast_lookup_failed_dataflow, 0}
   ]),
   {ok, Dictionary}.
 
@@ -70,8 +89,18 @@ handle_call(get_statistics, _From, Dictionary) ->
   CallLookupFailed = dict:fetch(call_lookup_failed, Dictionary),
   CastLookupFailed = dict:fetch(cast_lookup_failed, Dictionary),
 
+  AnySuccDf = dict:fetch(any_succ_dataflow, Dictionary),
+  AnyContractDf = dict:fetch(any_contract_dataflow, Dictionary),
+  CallDf = dict:fetch(call_dataflow, Dictionary),
+  CastDf = dict:fetch(cast_dataflow, Dictionary),
+  CallLookupFailedDf = dict:fetch(call_lookup_failed_dataflow, Dictionary),
+  CastLookupFailedDf = dict:fetch(cast_lookup_failed_dataflow, Dictionary),
+
   Res = [{any_succ, AnySucc}, {any_contract, AnyContract}, {call, Call},
-    {cast, Cast}, {call_lookup_failed, CallLookupFailed}, {cast_lookup_failed, CastLookupFailed}],
+    {cast, Cast}, {call_lookup_failed, CallLookupFailed}, {cast_lookup_failed, CastLookupFailed},
+
+    {any_succ_dataflow, AnySuccDf}, {any_contract_dataflow, AnyContractDf}, {call_dataflow, CallDf},
+    {cast_dataflow, CastDf}, {call_lookup_failed_dataflow, CallLookupFailedDf}, {cast_lookup_failed_dataflow, CastLookupFailedDf}],
 
   {reply, Res, Dictionary}.
 
