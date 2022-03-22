@@ -24,6 +24,7 @@
 
 -export([analyze_scc/7]).
 -export([get_safe_underapprox/2]).
+-export([beersketeers/1, beer2/4, save_beersketeers/1]).
 
 %%-import(helper, %% 'helper' could be any module doing sanity checks...
 -import(erl_types,
@@ -189,6 +190,85 @@ analyze_scc(SCC, NextLabel, CallGraph, CServer, Plt, PropTypes, Solvers0) ->
   T = solve(Funs, State3),
   orddict:from_list(maps:to_list(T)).
 
+-spec beer2(any(), any(), any(), any()) -> any().
+beer2(Tree, Body, DefinedVars, State) ->
+  %Body = cerl:fun_body(Tree),
+  Vars = cerl:fun_vars(Tree),
+  DefinedVars1 = add_def_list(Vars, DefinedVars),
+  State0 = state__new_constraint_context(State),
+  TreeVar = mk_var(Tree),
+  State2 =
+    try
+      State1 = case state__add_prop_constrs(Tree, State0) of
+                 not_called -> State0;
+                 PropState -> PropState
+               end,
+      {BodyState, BodyVar} = traverse(Body, DefinedVars1, State1),
+      state__store_conj(TreeVar, eq,
+        t_fun(mk_var_list(Vars), BodyVar), BodyState)
+    catch
+      throw:error -> State0
+    end,
+  Cs = state__cs(State2),
+  State3 = state__store_constrs(TreeVar, Cs, State2),
+  Ref = mk_constraint_ref(TreeVar, get_deps(Cs)),
+  OldCs = state__cs(State),
+  State4 = state__new_constraint_context(State3),
+  State5 = state__store_conj_list([OldCs, Ref], State4),
+  State6 = state__store_fun_arity(Tree, State5),
+  State7 = state__add_fun_to_scc(TreeVar, State6),
+  State7.
+
+-spec beersketeers(any()) -> any().
+beersketeers(State2) ->
+  Callgraph = State2#state.callgraph,
+  _Plt = State2#state.plt,
+  SCC = State2#state.mfas,
+  Codeserver = State2#state.cserver,
+
+  % FROM TYPESIG - analyse_scc
+  State3 = state__finalize(State2),
+  Funs = state__scc(State3),
+  pp_constrs_scc(Funs, State3),
+  constraints_to_dot_scc(Funs, State3),
+  T = solve(Funs, State3),
+  FunTypes = orddict:from_list(maps:to_list(T)),
+
+  AllFuns = lists:append(
+    [begin
+       {_Var, Fun} =
+         dialyzer_codeserver:lookup_mfa_code(MFA, Codeserver),
+       dialyzer_succ_typings:collect_fun_info([Fun])
+     end || MFA <- SCC]),
+
+  % FROM SUCC_TYPINGS - find_succ_types_for_scc
+  AllFunSet = sets:from_list([X || {X, _} <- AllFuns]),
+  FilteredFunTypes =
+    orddict:filter(fun(F, _T) -> sets:is_element(F, AllFunSet)
+                   end, FunTypes),
+  {FunMFAContracts, ModOpaques} =
+    dialyzer_succ_typings:prepare_decoration(FilteredFunTypes, Callgraph, Codeserver),
+  DecoratedFunTypes = dialyzer_succ_typings:decorate_succ_typings(FunMFAContracts, ModOpaques),
+  {DecoratedFunTypes, State3}.
+
+-spec save_beersketeers(any()) -> any().
+save_beersketeers([{SuccType, State} | SuccTypes_0]) ->
+  _Test = dialyzer_succ_typings:format_succ_types(SuccType, State#state.callgraph),
+  [{{M, F, A}, SuccType_0} | _Rest] = dialyzer_succ_typings:format_succ_types(SuccType, State#state.callgraph),
+  {_ReturnType, InputTypeWrapper} = SuccType_0,
+  [InputType, _, _] = InputTypeWrapper,
+  _Atom = case InputType of
+    {c,atom, [AA], _} -> AA;
+    {c,tuple, [{c,atom, [AA], _} | _], _} -> AA;
+    _ -> bad_match
+  end,
+  _DISCARD = dialyzer_plt:insert_list(State#state.plt, [{{M, F, A, _Atom}, SuccType_0}]),
+  save_beersketeers(SuccTypes_0);
+save_beersketeers([]) -> ok.
+
+%_Plt2 = dialyzer_succ_typings:insert_into_plt(DecoratedFunTypes, Callgraph, Plt).
+
+
 solvers([]) -> [v2];
 solvers(Solvers) -> Solvers.
 
@@ -298,6 +378,10 @@ traverse(Tree, DefinedVars, State) ->
       Arg = cerl:case_arg(Tree),
       Clauses = cerl:case_clauses(Tree),
       {State1, ArgVar} = traverse(Arg, DefinedVars, State),
+      % TODO: DO WORK
+      _Test = [handle_clauses([Clause], mk_var(Tree), ArgVar, DefinedVars, State1) || Clause <- Clauses],
+      _ABE1 = handle_clauses(Clauses, mk_var(Tree), ArgVar, DefinedVars, State1),
+      %_Test2 = [beersketeers(A) || A <- _Test],
       handle_clauses(Clauses, mk_var(Tree), ArgVar, DefinedVars, State1);
     call ->
       handle_call(Tree, DefinedVars, State);
@@ -369,6 +453,17 @@ traverse(Tree, DefinedVars, State) ->
       State5 = state__store_conj_list([OldCs, Ref], State4),
       State6 = state__store_fun_arity(Tree, State5),
       State7 = state__add_fun_to_scc(TreeVar, State6),
+
+      % Brew beer stuff
+      case Tree of
+        {_, [_, {function,{handle_call,3}},_,_],_,_} ->
+          {A, B, C, Clauses} = Body,
+          _States = [beer2(Tree, {A, B, C, [Clause]}, DefinedVars, State) || Clause <- Clauses],
+          _NewStates = [beersketeers(S) || S <- _States],
+          save_beersketeers(_NewStates);
+        _ -> ok
+      end,
+
       {State7, TreeVar};
     'let' ->
       Vars = cerl:let_vars(Tree),
