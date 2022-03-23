@@ -181,7 +181,8 @@ insert_list(#plt{info = Info} = PLT, List) ->
 
 -spec lookup(plt(), integer() | mfa_patt()) ->
         'none' | {'value', ret_args_types()}.
-
+lookup(Plt, {M, F, _A, Atom} = MFA) when is_atom(M), is_atom(F), is_atom(Atom) ->
+  lookup_1(Plt, MFA);
 lookup(Plt, {M, F, _} = MFA) when is_atom(M), is_atom(F) ->
   lookup_1(Plt, MFA);
 lookup(Plt, Label) when is_integer(Label) ->

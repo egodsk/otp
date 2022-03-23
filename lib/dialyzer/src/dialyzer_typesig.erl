@@ -378,10 +378,6 @@ traverse(Tree, DefinedVars, State) ->
       Arg = cerl:case_arg(Tree),
       Clauses = cerl:case_clauses(Tree),
       {State1, ArgVar} = traverse(Arg, DefinedVars, State),
-      % TODO: DO WORK
-      _Test = [handle_clauses([Clause], mk_var(Tree), ArgVar, DefinedVars, State1) || Clause <- Clauses],
-      _ABE1 = handle_clauses(Clauses, mk_var(Tree), ArgVar, DefinedVars, State1),
-      %_Test2 = [beersketeers(A) || A <- _Test],
       handle_clauses(Clauses, mk_var(Tree), ArgVar, DefinedVars, State1);
     call ->
       handle_call(Tree, DefinedVars, State);
@@ -989,7 +985,20 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
   SCCMFAs = State#state.mfas,
   Module = State#state.module,
   HandleCallMFA = {Module, handle_call, 3},
-  case dialyzer_plt:lookup(Plt, HandleCallMFA) of
+
+  [_Pid, InputType] = ArgVars,
+  Atom = case InputType of
+           {c, atom, [AA], _} -> AA;
+           {c, tuple, [{c, atom, [AA], _} | _], _} -> AA;
+           % TODO: Remember to fix bad_match
+           _ -> bad_match
+         end,
+  LookupType = case dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom}) of
+    none -> dialyzer_plt:lookup(Plt, HandleCallMFA);
+    T -> T
+  end,
+
+  case LookupType of
     none ->
       % gen_server:call is being used in more scenarios than just our discrepancies.
       % We therefore have to make sure that when nothing is found in the PLT, we do what Dialyzer normally does.
