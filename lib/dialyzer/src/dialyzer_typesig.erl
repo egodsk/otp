@@ -454,6 +454,19 @@ traverse(Tree, DefinedVars, State) ->
       case is_tree_handle_call(Tree) of
         true ->
           {BodyTag, BodyLabels, BodyValues, BodyClauses} = Body,
+
+          GroupByFunction = fun ({_ClauseTag, _ClauseLabel, ClauseArgs, _ClauseGuard, _ClauseBody}) ->
+                [InputTuple, _From, _State] = ClauseArgs,
+                case InputTuple of
+                  {c_literal, _List, Atom} -> Atom;
+                  {c_tuple, _InputLabel, [{c_literal, _List, Atom} | _Tail]} -> Atom;
+                  _ -> -1
+                end
+            end,
+          GroupBy = fun(F, L) -> lists:foldr(fun({K,V}, D) -> dict:append(K, V, D) end , dict:new(), [ {F(X), X} || X <- L ]) end,
+
+          Dict = GroupBy(GroupByFunction, BodyClauses),
+          _DictList = dict:to_list(Dict),
           States = [build_state_constraints_from_body(Tree, {BodyTag, BodyLabels, BodyValues, [BodyClause]}, DefinedVars, State) || BodyClause <- BodyClauses],
           DecoratedFunctionTypesWithState = [decorate_functions_from_constraints(S) || S <- States],
           store_gen_server_type_information(DecoratedFunctionTypesWithState);
