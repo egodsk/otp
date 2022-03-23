@@ -3620,7 +3620,7 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module}) 
           3 -> [any, InputTypes, any]
         end,
 
-      Contract = dialyzer_plt:lookup_contract(PLT, HandleCallMFA),
+      Contract = dialyzer_plt:lookup_contract(Plt, HandleCallMFA),
       NewContract = case Contract of
                       none ->
                         Contract;

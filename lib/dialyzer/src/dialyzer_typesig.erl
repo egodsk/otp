@@ -24,7 +24,7 @@
 
 -export([analyze_scc/7]).
 -export([get_safe_underapprox/2]).
--export([beersketeers/1, beer2/4, save_beersketeers/1]).
+-export([decorate_functions_from_constraints/1, build_state_constraints_from_body/4, store_gen_server_type_information/1]).
 
 %%-import(helper, %% 'helper' could be any module doing sanity checks...
 -import(erl_types,
@@ -190,9 +190,8 @@ analyze_scc(SCC, NextLabel, CallGraph, CServer, Plt, PropTypes, Solvers0) ->
   T = solve(Funs, State3),
   orddict:from_list(maps:to_list(T)).
 
--spec beer2(any(), any(), any(), any()) -> any().
-beer2(Tree, Body, DefinedVars, State) ->
-  %Body = cerl:fun_body(Tree),
+-spec build_state_constraints_from_body(any(), any(), any(), any()) -> any().
+build_state_constraints_from_body(Tree, Body, DefinedVars, State) ->
   Vars = cerl:fun_vars(Tree),
   DefinedVars1 = add_def_list(Vars, DefinedVars),
   State0 = state__new_constraint_context(State),
@@ -219,19 +218,19 @@ beer2(Tree, Body, DefinedVars, State) ->
   State7 = state__add_fun_to_scc(TreeVar, State6),
   State7.
 
--spec beersketeers(any()) -> any().
-beersketeers(State2) ->
-  Callgraph = State2#state.callgraph,
-  _Plt = State2#state.plt,
-  SCC = State2#state.mfas,
-  Codeserver = State2#state.cserver,
+-spec decorate_functions_from_constraints(any()) -> any().
+decorate_functions_from_constraints(State) ->
+  Callgraph = State#state.callgraph,
+  _Plt = State#state.plt,
+  SCC = State#state.mfas,
+  Codeserver = State#state.cserver,
 
   % FROM TYPESIG - analyse_scc
-  State3 = state__finalize(State2),
-  Funs = state__scc(State3),
-  pp_constrs_scc(Funs, State3),
-  constraints_to_dot_scc(Funs, State3),
-  T = solve(Funs, State3),
+  State1 = state__finalize(State),
+  Funs = state__scc(State1),
+  pp_constrs_scc(Funs, State1),
+  constraints_to_dot_scc(Funs, State1),
+  T = solve(Funs, State1),
   FunTypes = orddict:from_list(maps:to_list(T)),
 
   AllFuns = lists:append(
@@ -249,24 +248,22 @@ beersketeers(State2) ->
   {FunMFAContracts, ModOpaques} =
     dialyzer_succ_typings:prepare_decoration(FilteredFunTypes, Callgraph, Codeserver),
   DecoratedFunTypes = dialyzer_succ_typings:decorate_succ_typings(FunMFAContracts, ModOpaques),
-  {DecoratedFunTypes, State3}.
+  {DecoratedFunTypes, State1}.
 
--spec save_beersketeers(any()) -> any().
-save_beersketeers([{SuccType, State} | SuccTypes_0]) ->
-  _Test = dialyzer_succ_typings:format_succ_types(SuccType, State#state.callgraph),
-  [{{M, F, A}, SuccType_0} | _Rest] = dialyzer_succ_typings:format_succ_types(SuccType, State#state.callgraph),
-  {_ReturnType, InputTypeWrapper} = SuccType_0,
+-spec store_gen_server_type_information(any()) -> any().
+store_gen_server_type_information([]) -> ok;
+store_gen_server_type_information([{DecoratedFunctionType, State} | Tail]) ->
+  [{{M, F, A}, FormattedFunctionType} | _Rest] = dialyzer_succ_typings:format_succ_types(DecoratedFunctionType, State#state.callgraph),
+  {_ReturnType, InputTypeWrapper} = FormattedFunctionType,
   [InputType, _, _] = InputTypeWrapper,
-  _Atom = case InputType of
-    {c,atom, [AA], _} -> AA;
-    {c,tuple, [{c,atom, [AA], _} | _], _} -> AA;
+  case InputType of
+    {c,atom, [Atom], _} ->
+      dialyzer_plt:insert_list(State#state.plt, [{{M, F, A, Atom}, FormattedFunctionType}]);
+    {c,tuple, [{c,atom, [Atom], _} | _], _} ->
+      dialyzer_plt:insert_list(State#state.plt, [{{M, F, A, Atom}, FormattedFunctionType}]);
     _ -> bad_match
   end,
-  _DISCARD = dialyzer_plt:insert_list(State#state.plt, [{{M, F, A, _Atom}, SuccType_0}]),
-  save_beersketeers(SuccTypes_0);
-save_beersketeers([]) -> ok.
-
-%_Plt2 = dialyzer_succ_typings:insert_into_plt(DecoratedFunTypes, Callgraph, Plt).
+  store_gen_server_type_information(Tail).
 
 
 solvers([]) -> [v2];
@@ -450,13 +447,13 @@ traverse(Tree, DefinedVars, State) ->
       State6 = state__store_fun_arity(Tree, State5),
       State7 = state__add_fun_to_scc(TreeVar, State6),
 
-      % Brew beer stuff
+      % Split unioned handle_call type information and store in ETS
       case Tree of
         {_, [_, {function,{handle_call,3}},_,_],_,_} ->
-          {A, B, C, Clauses} = Body,
-          _States = [beer2(Tree, {A, B, C, [Clause]}, DefinedVars, State) || Clause <- Clauses],
-          _NewStates = [beersketeers(S) || S <- _States],
-          save_beersketeers(_NewStates);
+          {BodyTag, BodyLabels, BodyValues, BodyClauses} = Body,
+          States = [build_state_constraints_from_body(Tree, {BodyTag, BodyLabels, BodyValues, [BodyClause]}, DefinedVars, State) || BodyClause <- BodyClauses],
+          DecoratedFunctionTypesWithState = [decorate_functions_from_constraints(S) || S <- States],
+          store_gen_server_type_information(DecoratedFunctionTypesWithState);
         _ -> ok
       end,
 
