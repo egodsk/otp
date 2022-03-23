@@ -275,6 +275,9 @@ solvers(Solvers) -> Solvers.
 %%
 %% ============================================================================
 
+is_tree_handle_call({_, [_, {function,{handle_call,3}},_,_],_,_}) -> true;
+is_tree_handle_call(_) -> false.
+
 traverse_scc([{M,_,_}=MFA|Left], Codeserver, DefSet, AccState) ->
   TmpState1 = state__set_module(AccState, M),
   Def = dialyzer_codeserver:lookup_mfa_code(MFA, Codeserver),
@@ -448,15 +451,15 @@ traverse(Tree, DefinedVars, State) ->
       State7 = state__add_fun_to_scc(TreeVar, State6),
 
       % Split unioned handle_call type information and store in ETS
-      case Tree of
-        {_, [_, {function,{handle_call,3}},_,_],_,_} ->
+      case is_tree_handle_call(Tree) of
+        true ->
           {BodyTag, BodyLabels, BodyValues, BodyClauses} = Body,
           States = [build_state_constraints_from_body(Tree, {BodyTag, BodyLabels, BodyValues, [BodyClause]}, DefinedVars, State) || BodyClause <- BodyClauses],
           DecoratedFunctionTypesWithState = [decorate_functions_from_constraints(S) || S <- States],
           store_gen_server_type_information(DecoratedFunctionTypesWithState);
-        _ -> ok
+        false ->
+          ok
       end,
-
       {State7, TreeVar};
     'let' ->
       Vars = cerl:let_vars(Tree),

@@ -3644,7 +3644,9 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module}) 
         {'value', {ReturnTypes, GenServerInput}},
         NewContract,
         t_any()}
-  end.
+  end;
+state__fun_info(MFA, _As, State) ->
+  state__fun_info(MFA, State).
 
 forward_args(Fun, ArgTypes, #state{work = Work, fun_tab = FunTab} = State) ->
   {NewArgTypes, OldOut, Fixpoint} =
