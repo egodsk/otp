@@ -3578,13 +3578,14 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module}) 
   HandleCallMFA = {Module, handle_call, 3},
 
   [_Pid, InputType] = As,
-  Atom = case InputType of
-           {c, atom, [AA], _} -> AA;
-           {c, tuple, [{c, atom, [AA], _} | _], _} -> AA;
-           % TODO: Remember to fix bad_match
-           _ -> bad_match
-         end,
-  LookupType = case dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom}) of
+  LookupTypeTemp = case InputType of
+                     {c, atom, [Atom], _} ->
+                       dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, 1});
+                     {c, tuple, [{c, atom, [Atom], _} | _] = InputList, _} ->
+                       dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
+                     _ -> none
+                   end,
+  LookupType = case LookupTypeTemp of
                  none -> dialyzer_plt:lookup(Plt, HandleCallMFA);
                  T -> T
                end,

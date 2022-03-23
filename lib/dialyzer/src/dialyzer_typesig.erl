@@ -258,9 +258,9 @@ store_gen_server_type_information([{DecoratedFunctionType, State} | Tail]) ->
   [InputType, _, _] = InputTypeWrapper,
   case InputType of
     {c,atom, [Atom], _} ->
-      dialyzer_plt:insert_list(State#state.plt, [{{M, F, A, Atom}, FormattedFunctionType}]);
-    {c,tuple, [{c,atom, [Atom], _} | _], _} ->
-      dialyzer_plt:insert_list(State#state.plt, [{{M, F, A, Atom}, FormattedFunctionType}]);
+      dialyzer_plt:insert_list(State#state.plt, [{{M, F, A, Atom, 1}, FormattedFunctionType}]);
+    {c,tuple, [{c,atom, [Atom], _} | _] = InputTypeList, _} ->
+      dialyzer_plt:insert_list(State#state.plt, [{{M, F, A, Atom, length(InputTypeList)}, FormattedFunctionType}]);
     _ -> bad_match
   end,
   store_gen_server_type_information(Tail).
@@ -458,8 +458,8 @@ traverse(Tree, DefinedVars, State) ->
           GroupByFunction = fun ({_ClauseTag, _ClauseLabel, ClauseArgs, _ClauseGuard, _ClauseBody}) ->
                 [InputTuple, _From, _State] = ClauseArgs,
                 case InputTuple of
-                  {c_literal, _List, Atom} -> Atom;
-                  {c_tuple, _InputLabel, [{c_literal, _List, Atom} | _Tail]} -> Atom;
+                  {c_literal, _List, Atom} -> {Atom, 1};
+                  {c_tuple, _InputLabel, [{c_literal, _List, Atom} | _Tail] = InputList} -> {Atom, length(InputList)};
                   _ -> -1
                 end
             end,
@@ -1000,13 +1000,14 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
   HandleCallMFA = {Module, handle_call, 3},
 
   [_Pid, InputType] = ArgVars,
-  Atom = case InputType of
-           {c, atom, [AA], _} -> AA;
-           {c, tuple, [{c, atom, [AA], _} | _], _} -> AA;
-           % TODO: Remember to fix bad_match
-           _ -> bad_match
+  LookupTypeTemp = case InputType of
+           {c, atom, [Atom], _} ->
+             dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, 1});
+           {c, tuple, [{c, atom, [Atom], _} | _] = InputList, _} ->
+             dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
+           _ -> none
          end,
-  LookupType = case dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom}) of
+  LookupType = case LookupTypeTemp of
     none -> dialyzer_plt:lookup(Plt, HandleCallMFA);
     T -> T
   end,
