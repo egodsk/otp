@@ -10,6 +10,7 @@
 % - for external use (note: calls are Synchronous)
 -export([start/0, increment_counter_any_succ/1, increment_counter_any_contract/1, increment_counter_call/1, increment_counter_cast/1,
   increment_counter_call_arity/1,
+  increment_known_none_bug/1,
   increment_counter_call_arity_lookup_failed/1, increment_counter_call_lookup_failed/1, increment_counter_cast_lookup_failed/1, get_statistics/0]).
 
 % Client APIs
@@ -20,6 +21,11 @@ increment_counter_any_succ(dialyzer_typesig) ->
   gen_server:cast(?MODULE, {increment, any_succ});
 increment_counter_any_succ(dialyzer_dataflow) ->
   gen_server:cast(?MODULE, {increment, any_succ_dataflow}).
+
+% Known bug
+-spec increment_known_none_bug(any()) -> any().
+increment_known_none_bug(dialyzer_typesig) ->
+  gen_server:cast(?MODULE, {increment, known_bug}).
 
 % Any in contract
 -spec increment_counter_any_contract(any()) -> any().

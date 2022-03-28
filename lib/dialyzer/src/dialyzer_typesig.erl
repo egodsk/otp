@@ -1010,6 +1010,9 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
       % Increment handle_call with arity lookup failed
       dialyzer_statistics:increment_counter_call_arity_lookup_failed(?MODULE),
       dialyzer_plt:lookup(Plt, HandleCallMFA);
+    {value, {none, _}} ->
+      dialyzer_statistics:increment_known_none_bug(?MODULE),
+      dialyzer_plt:lookup(Plt, HandleCallMFA);
     T ->
       % handle_call with arity found in Plt
       dialyzer_statistics:increment_counter_call_arity(?MODULE),
