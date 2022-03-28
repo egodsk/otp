@@ -88,6 +88,7 @@ start() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 init([]) -> Dictionary = dict:from_list(
   [
     {any_succ, 0}, {any_succ_dataflow, 0},
+    {known_bug, 0},
     {any_contract, 0}, {any_contract_dataflow, 0},
     {call_arity, 0}, {call_arity_dataflow, 0}, {call, 0}, {call_dataflow, 0},
     {cast, 0}, {cast_dataflow, 0},
@@ -106,6 +107,7 @@ handle_cast({increment, Who}, Dictionary) ->
 handle_call(get_statistics, _From, Dictionary) ->
   AnySucc = dict:fetch(any_succ, Dictionary),
   AnyContract = dict:fetch(any_contract, Dictionary),
+  KnownBug = dict:fetch(known_bug, Dictionary),
   CallArity = dict:fetch(call_arity, Dictionary),
   Call = dict:fetch(call, Dictionary),
   Cast = dict:fetch(cast, Dictionary),
@@ -125,6 +127,7 @@ handle_call(get_statistics, _From, Dictionary) ->
   Res = [
     {any_succ, AnySucc}, {any_contract, AnyContract}, {call_arity, CallArity}, {call, Call},
     {cast, Cast}, {call_arity_lookup_failed, CallArityLookupFailed},
+    {known_bug, KnownBug},
     {call_lookup_failed, CallLookupFailed}, {cast_lookup_failed, CastLookupFailed},
 
     {any_succ_dataflow, AnySuccDf}, {any_contract_dataflow, AnyContractDf}, {call_arity_dataflow, CallArityDf}, {call_dataflow, CallDf},
