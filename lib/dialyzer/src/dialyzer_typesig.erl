@@ -466,8 +466,8 @@ traverse(Tree, DefinedVars, State) ->
           GroupBy = fun(F, L) -> lists:foldr(fun({K,V}, D) -> dict:append(K, V, D) end , dict:new(), [ {F(X), X} || X <- L ]) end,
 
           Dict = GroupBy(GroupByFunction, BodyClauses),
-          _DictList = dict:to_list(Dict),
-          States = [build_state_constraints_from_body(Tree, {BodyTag, BodyLabels, BodyValues, [BodyClause]}, DefinedVars, State) || BodyClause <- BodyClauses],
+          DictList = dict:to_list(Dict),
+          States = [build_state_constraints_from_body(Tree, {BodyTag, BodyLabels, BodyValues, BodyClause}, DefinedVars, State) || {_Key, BodyClause} <- DictList],
           DecoratedFunctionTypesWithState = [decorate_functions_from_constraints(S) || S <- States],
           store_gen_server_type_information(DecoratedFunctionTypesWithState);
         false ->
