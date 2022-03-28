@@ -373,6 +373,7 @@ do_analysis(Options) ->
   end.
   
 do_analysis(Files, Options, Plt, PltInfo) ->
+  dialyzer_statistics:start(),
   assert_writable(Options#options.output_plt),
   report_analysis_start(Options),
   State0 = new_state(),
@@ -399,6 +400,7 @@ do_analysis(Files, Options, Plt, PltInfo) ->
   Return = cl_loop(State3),
   {T2, _} = statistics(wall_clock),
   report_elapsed_time(T1, T2, Options),
+  io:format("Statistics for gen_server: ~p~n", [dialyzer_statistics:get_statistics()]),
   Return.
 
 convert_analysis_type(plt_check, true)   -> succ_typings;

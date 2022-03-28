@@ -940,31 +940,28 @@ get_plt_constr_gen_server_handle_cast(InputMFA, Dst, ArgVars, State) ->
   Plt = state__plt(State),
   SCCMFAs = State#state.mfas,
   Module = State#state.module,
-  HandleCallMFA = {Module, handle_cast, 2},
-  case dialyzer_plt:lookup(Plt, HandleCallMFA) of
+  HandleCastMFA = {Module, handle_cast, 2},
+  case dialyzer_plt:lookup(Plt, HandleCastMFA) of
     none ->
-      % gen_server:call is being used in more scenarios than just our discrepancies.
+      % Get statistics on lookup not found
+      dialyzer_statistics:increment_counter_cast_lookup_failed(?MODULE),
+
+      % gen_server:cast is being used in more scenarios than just our discrepancies.
       % We therefore have to make sure that when nothing is found in the PLT, we do what Dialyzer normally does.
       PltRes = dialyzer_plt:lookup(Plt, InputMFA),
       get_plt_constr_contract(InputMFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs);
     {value, {_ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
-      % Get the 3 arguments to handle_call.
-      % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
-      % then we are pulling out {my_server_api, Arg}
-      [InputTypes, _] = InputTypesWrapper,
+      % Increment handle_cast counter
+      dialyzer_statistics:increment_counter_cast(?MODULE),
 
-      % Get the return types of the handle_call.
-      % ReturnTypeTag --> type of the returned element, can be tuple or tuple_set
-      % If handle_call returns only a single type then it is a tuple
-      % If handle_call returns multiple different types then it is a tuple_set
-      % ReturnTypesWrapper --> either a single tuple or a list of tuples (tuple_set)
+      [InputTypes, _] = InputTypesWrapper,
       ReturnTypes = {c,atom,[ok],unknown},
       GenServerInput = [any, InputTypes],
 
       Contract =
-        case lists:member(HandleCallMFA, SCCMFAs) of
+        case lists:member(HandleCastMFA, SCCMFAs) of
           true -> none;
-          false -> dialyzer_plt:lookup_contract(Plt, HandleCallMFA)
+          false -> dialyzer_plt:lookup_contract(Plt, HandleCastMFA)
         end,
 
       case Contract of
@@ -1008,17 +1005,31 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
            _ -> none
          end,
   LookupType = case LookupTypeTemp of
-    none -> dialyzer_plt:lookup(Plt, HandleCallMFA);
-    T -> T
+    none ->
+      % TODO: Consider case where the InputType above did not match
+      % Increment handle_call with arity lookup failed
+      dialyzer_statistics:increment_counter_call_arity_lookup_failed(?MODULE),
+      dialyzer_plt:lookup(Plt, HandleCallMFA);
+    T ->
+      % handle_call with arity found in Plt
+      dialyzer_statistics:increment_counter_call_arity(?MODULE),
+      T
   end,
 
   case LookupType of
     none ->
       % gen_server:call is being used in more scenarios than just our discrepancies.
       % We therefore have to make sure that when nothing is found in the PLT, we do what Dialyzer normally does.
+
+      % Increment handle_call lookup failed counter
+      dialyzer_statistics:increment_counter_call_lookup_failed(?MODULE),
+
       PltRes = dialyzer_plt:lookup(Plt, InputMFA),
       get_plt_constr_contract(InputMFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs);
     {value, {ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+      % Increment handle_call  counter
+      dialyzer_statistics:increment_counter_call(?MODULE),
+
       % Get the 3 arguments to handle_call.
       % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
       % then we are pulling out {my_server_api, Arg}
@@ -1036,6 +1047,12 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
           tuple_set -> get_tuple_set_return_type(ReturnTypesWrapper);
           _ -> any
         end,
+
+      % Get statistics on any reached in success typing
+      case ReturnTypes of
+        any -> dialyzer_statistics:increment_counter_any_succ(?MODULE);
+        _ -> ok
+      end,
 
       GenServerInput =
         case Arity of
@@ -1091,6 +1108,12 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
                     tuple_set -> get_tuple_set_return_type(ContractReturnType);
                     _ -> any
                   end,
+
+                % Get statistics on any reached in contract
+                case CRet of
+                  any -> dialyzer_statistics:increment_counter_any_contract(?MODULE);
+                  _ -> ok
+                end,
 
                 t_inf(CRet, ReturnTypes)
               end, ArgVars
