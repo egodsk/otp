@@ -32,7 +32,11 @@
 	 %% find_required_by/2,
 	 find_depends_on/2,
 	 collect_warnings/2,
-	 lookup_names/2
+	 lookup_names/2,
+  collect_fun_info/1,
+  prepare_decoration/3,
+  decorate_succ_typings/2,
+  format_succ_types/2
 	]).
 
 -export_type([typesig_init_data/0, dataflow_init_data/0, warnings_init_data/0]).
@@ -380,6 +384,7 @@ find_succ_types_for_scc(SCC0, {Codeserver, Callgraph, Plt, Solvers}) ->
       [Fun || {Fun, _Arity} <- AllFuns]
   end.
 
+-spec prepare_decoration(any(), any(), any()) -> any().
 prepare_decoration(FunTypes, Callgraph, Codeserver) ->
   F = fun({Label, _Type}=LabelType, Acc) ->
           case dialyzer_callgraph:lookup_name(Label, Callgraph) of
@@ -398,6 +403,7 @@ prepare_decoration(FunTypes, Callgraph, Codeserver) ->
       M <- lists:usort([M || {_LabelType, {{M, _, _}, _Con}} <- Contracts])],
   {Contracts, orddict:from_list(ModOpaques)}.
 
+-spec decorate_succ_typings(any(), any()) -> any().
 decorate_succ_typings(FunTypesContracts, ModOpaques) ->
   F = fun({{Label, Type}, {{M, _, _}, Contract}}) ->
           Args = dialyzer_contracts:get_contract_args(Contract),
@@ -424,6 +430,7 @@ get_fun_types_from_plt([{FunLabel, Arity}|Left], Callgraph, Plt, Map) ->
 get_fun_types_from_plt([], _Callgraph, _Plt, Map) ->
   orddict:from_list(Map).
 
+-spec collect_fun_info(any()) -> any().
 collect_fun_info(Trees) ->
   collect_fun_info(Trees, []).
 
@@ -457,6 +464,7 @@ insert_into_plt(SuccTypes0, Callgraph, Plt) ->
   debug_pp_succ_typings(SuccTypes),
   dialyzer_plt:insert_list(Plt, SuccTypes).
 
+-spec format_succ_types(any(), any()) -> any().
 format_succ_types(SuccTypes, Callgraph) ->
   format_succ_types(SuccTypes, Callgraph, []).
 

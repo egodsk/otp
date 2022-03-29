@@ -24,6 +24,7 @@
 
 -export([analyze_scc/7]).
 -export([get_safe_underapprox/2]).
+-export([decorate_functions_from_constraints/1, build_state_constraints_from_body/4, store_gen_server_type_information/1]).
 
 %%-import(helper, %% 'helper' could be any module doing sanity checks...
 -import(erl_types,
@@ -128,6 +129,16 @@
 -define(TYPE_LIMIT, 4).
 -define(INTERNAL_TYPE_LIMIT, 5).
 
+% Add gen_server logging
+-define(GEN_SERVER_LOGGING, true).
+
+-ifdef(GEN_SERVER_LOGGING).
+-define(log(__String, __Args), io:format(__String, __Args)).
+-define(log(__String), io:format(__String)).
+-else.
+-define(log(__String, __Args), ok).
+-endif.
+
 %%-define(DEBUG, true).
 %%-define(DEBUG_CONSTRAINTS, true).
 -ifdef(DEBUG).
@@ -189,6 +200,82 @@ analyze_scc(SCC, NextLabel, CallGraph, CServer, Plt, PropTypes, Solvers0) ->
   T = solve(Funs, State3),
   orddict:from_list(maps:to_list(T)).
 
+-spec build_state_constraints_from_body(any(), any(), any(), any()) -> any().
+build_state_constraints_from_body(Tree, Body, DefinedVars, State) ->
+  Vars = cerl:fun_vars(Tree),
+  DefinedVars1 = add_def_list(Vars, DefinedVars),
+  State0 = state__new_constraint_context(State),
+  TreeVar = mk_var(Tree),
+  State2 =
+    try
+      State1 = case state__add_prop_constrs(Tree, State0) of
+                 not_called -> State0;
+                 PropState -> PropState
+               end,
+      {BodyState, BodyVar} = traverse(Body, DefinedVars1, State1),
+      state__store_conj(TreeVar, eq,
+        t_fun(mk_var_list(Vars), BodyVar), BodyState)
+    catch
+      throw:error -> State0
+    end,
+  Cs = state__cs(State2),
+  State3 = state__store_constrs(TreeVar, Cs, State2),
+  Ref = mk_constraint_ref(TreeVar, get_deps(Cs)),
+  OldCs = state__cs(State),
+  State4 = state__new_constraint_context(State3),
+  State5 = state__store_conj_list([OldCs, Ref], State4),
+  State6 = state__store_fun_arity(Tree, State5),
+  State7 = state__add_fun_to_scc(TreeVar, State6),
+  State7.
+
+-spec decorate_functions_from_constraints(any()) -> any().
+decorate_functions_from_constraints(State) ->
+  Callgraph = State#state.callgraph,
+  _Plt = State#state.plt,
+  SCC = State#state.mfas,
+  Codeserver = State#state.cserver,
+
+  % FROM TYPESIG - analyse_scc
+  State1 = state__finalize(State),
+  Funs = state__scc(State1),
+  pp_constrs_scc(Funs, State1),
+  constraints_to_dot_scc(Funs, State1),
+  T = solve(Funs, State1),
+  FunTypes = orddict:from_list(maps:to_list(T)),
+
+  AllFuns = lists:append(
+    [begin
+       {_Var, Fun} =
+         dialyzer_codeserver:lookup_mfa_code(MFA, Codeserver),
+       dialyzer_succ_typings:collect_fun_info([Fun])
+     end || MFA <- SCC]),
+
+  % FROM SUCC_TYPINGS - find_succ_types_for_scc
+  AllFunSet = sets:from_list([X || {X, _} <- AllFuns]),
+  FilteredFunTypes =
+    orddict:filter(fun(F, _T) -> sets:is_element(F, AllFunSet)
+                   end, FunTypes),
+  {FunMFAContracts, ModOpaques} =
+    dialyzer_succ_typings:prepare_decoration(FilteredFunTypes, Callgraph, Codeserver),
+  DecoratedFunTypes = dialyzer_succ_typings:decorate_succ_typings(FunMFAContracts, ModOpaques),
+  {DecoratedFunTypes, State1}.
+
+-spec store_gen_server_type_information(any()) -> any().
+store_gen_server_type_information([]) -> ok;
+store_gen_server_type_information([{DecoratedFunctionType, State} | Tail]) ->
+  [{{M, F, A}, FormattedFunctionType} | _Rest] = dialyzer_succ_typings:format_succ_types(DecoratedFunctionType, State#state.callgraph),
+  {_ReturnType, InputTypeWrapper} = FormattedFunctionType,
+  [InputType, _, _] = InputTypeWrapper,
+  case InputType of
+    {c,atom, [Atom], _} ->
+      dialyzer_plt:insert_list(State#state.plt, [{{M, F, A, Atom, 1}, FormattedFunctionType}]);
+    {c,tuple, [{c,atom, [Atom], _} | _] = InputTypeList, _} ->
+      dialyzer_plt:insert_list(State#state.plt, [{{M, F, A, Atom, length(InputTypeList)}, FormattedFunctionType}]);
+    _ -> bad_match
+  end,
+  store_gen_server_type_information(Tail).
+
+
 solvers([]) -> [v2];
 solvers(Solvers) -> Solvers.
 
@@ -197,6 +284,9 @@ solvers(Solvers) -> Solvers.
 %%  Gets the constraints by traversing the code.
 %%
 %% ============================================================================
+
+is_tree_handle_call({_, [_, {function,{handle_call,3}},_,_],_,_}) -> true;
+is_tree_handle_call(_) -> false.
 
 traverse_scc([{M,_,_}=MFA|Left], Codeserver, DefSet, AccState) ->
   TmpState1 = state__set_module(AccState, M),
@@ -369,6 +459,30 @@ traverse(Tree, DefinedVars, State) ->
       State5 = state__store_conj_list([OldCs, Ref], State4),
       State6 = state__store_fun_arity(Tree, State5),
       State7 = state__add_fun_to_scc(TreeVar, State6),
+
+      % Split unioned handle_call type information and store in ETS
+      case is_tree_handle_call(Tree) of
+        true ->
+          {BodyTag, BodyLabels, BodyValues, BodyClauses} = Body,
+
+          GroupByFunction = fun ({_ClauseTag, _ClauseLabel, ClauseArgs, _ClauseGuard, _ClauseBody}) ->
+                [InputTuple, _From, _State] = ClauseArgs,
+                case InputTuple of
+                  {c_literal, _List, Atom} -> {Atom, 1};
+                  {c_tuple, _InputLabel, [{c_literal, _List, Atom} | _Tail] = InputList} -> {Atom, length(InputList)};
+                  _ -> -1
+                end
+            end,
+          GroupBy = fun(F, L) -> lists:foldr(fun({K,V}, D) -> dict:append(K, V, D) end , dict:new(), [ {F(X), X} || X <- L ]) end,
+
+          Dict = GroupBy(GroupByFunction, BodyClauses),
+          DictList = dict:to_list(Dict),
+          States = [build_state_constraints_from_body(Tree, {BodyTag, BodyLabels, BodyValues, BodyClause}, DefinedVars, State) || {_Key, BodyClause} <- DictList],
+          DecoratedFunctionTypesWithState = [decorate_functions_from_constraints(S) || S <- States],
+          store_gen_server_type_information(DecoratedFunctionTypesWithState);
+        false ->
+          ok
+      end,
       {State7, TreeVar};
     'let' ->
       Vars = cerl:let_vars(Tree),
@@ -809,10 +923,237 @@ handle_call(Call, DefinedVars, State) ->
       {state__store_conj_lists(MF, sub, [t_module(), t_atom()], State1), Dst}
   end.
 
+get_tuple_return_type(ReturnType) ->
+  case ReturnType of
+    [{c, atom, [reply], _}, ReplyType, _] -> ReplyType;
+    [{c, atom, [reply], _}, ReplyType, _, _] -> ReplyType;
+    [{c, atom, [stop], _}, _, ReplyType, _] -> ReplyType;
+    _ -> any
+  end.
+
+get_tuple_set_return_type(ReturnTypeList) ->
+  Elements = lists:flatten([E || {_Arity, E} <- ReturnTypeList]),
+  [RFirst | RRest] = [get_tuple_return_type(H) || {_C, _Tag, H, _Unknown} <- Elements],
+  lists:foldl(fun(X, Acc) -> erl_types:t_sup(X, Acc) end, RFirst, RRest).
+
+get_plt_constr({P, call, _} = InputMFA, Dst, ArgVars, State) when P =:= gen_server; P =:= 'Elixir.GenServer' ->
+  get_plt_constr_gen_server_handle_call(InputMFA, Dst, ArgVars, State);
+get_plt_constr({P, cast, _} = InputMFA, Dst, ArgVars, State) when P =:= gen_server; P =:= 'Elixir.GenServer' ->
+  get_plt_constr_gen_server_handle_cast(InputMFA, Dst, ArgVars, State);
 get_plt_constr(MFA, Dst, ArgVars, State) ->
   Plt = state__plt(State),
   PltRes = dialyzer_plt:lookup(Plt, MFA),
   SCCMFAs = State#state.mfas,
+  get_plt_constr_contract(MFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs).
+
+get_plt_constr_gen_server_handle_cast(InputMFA, Dst, ArgVars, State) ->
+  Plt = state__plt(State),
+  SCCMFAs = State#state.mfas,
+  Module = State#state.module,
+  HandleCastMFA = {Module, handle_cast, 2},
+  case dialyzer_plt:lookup(Plt, HandleCastMFA) of
+    none ->
+      % Get statistics on lookup not found
+      dialyzer_statistics:increment_counter_cast_lookup_failed(?MODULE),
+
+      % gen_server:cast is being used in more scenarios than just our discrepancies.
+      % We therefore have to make sure that when nothing is found in the PLT, we do what Dialyzer normally does.
+      PltRes = dialyzer_plt:lookup(Plt, InputMFA),
+      get_plt_constr_contract(InputMFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs);
+    {value, {_ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+      % Increment handle_cast counter
+      dialyzer_statistics:increment_counter_cast(?MODULE),
+
+      [InputTypes, _] = InputTypesWrapper,
+      ReturnTypes = {c,atom,[ok],unknown},
+      GenServerInput = [any, InputTypes],
+
+      Contract =
+        case lists:member(HandleCastMFA, SCCMFAs) of
+          true -> none;
+          false -> dialyzer_plt:lookup_contract(Plt, HandleCastMFA)
+        end,
+
+      case Contract of
+        none ->
+          % PltRes is always of type {'value', {.., ..}} defined above
+          state__store_conj_lists([Dst | ArgVars], sub, [ReturnTypes | GenServerInput], State);
+        {value, #contract{args = GenArgs} = _C} ->
+          % PltRes is always of type {'value', {.., ..}} defined above
+          %% Need to combine the contract with the success typing.
+          % Payload to handle_call --> e.g. {my_api_server, Arg}
+          [RequestType, _] = GenArgs,
+          % Based on the number of arguments to gen_server:call we need to make sure we match that number
+          NewGenArgs = [any, RequestType],
+
+          {RetType, ArgCs} = {
+            ?mk_fun_var(
+              fun(_Map) ->
+                CRet = {c,atom,[ok],unknown},
+                t_inf(CRet, ReturnTypes)
+              end, ArgVars
+            ),
+            [t_inf(X, Y) || {X, Y} <- lists:zip(NewGenArgs, GenServerInput)]
+          },
+          state__store_conj_lists([Dst | ArgVars], sub, [RetType | ArgCs], State)
+      end
+  end.
+
+get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, State) ->
+  % TODO: How do we handle that Elixir has a different MFA for calling gen_server?
+  Plt = state__plt(State),
+  SCCMFAs = State#state.mfas,
+  Module = State#state.module,
+  HandleCallMFA = {Module, handle_call, 3},
+
+  [_Pid, InputType] = ArgVars,
+  LookupTypeTemp = case InputType of
+           {c, atom, [Atom], _} ->
+             ?log("[TYPESIG]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, 1}]),
+             dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, 1});
+           {c, tuple, [{c, atom, [Atom], _} | _] = InputList, _} ->
+             ?log("[TYPESIG]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, length(InputList)}]),
+             dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
+           _ -> none
+         end,
+
+  ?log("[TYPESIG]: Result of Plt lookup with arity: ~n~p~n~n", [LookupTypeTemp]),
+
+  LookupType = case LookupTypeTemp of
+    none ->
+      % TODO: Consider case where the InputType above did not match
+      ?log("[TYPESIG]: Plt lookup for: ~n~p~n~n", [HandleCallMFA]),
+      % Increment handle_call with arity lookup failed
+      dialyzer_statistics:increment_counter_call_arity_lookup_failed(?MODULE),
+      dialyzer_plt:lookup(Plt, HandleCallMFA);
+    {value, {none, _}} ->
+      ?log("[TYPESIG]: The known bug with none was encountered!~n~n"),
+      ?log("[TYPESIG]: Plt lookup for: ~n~p~n~n", [HandleCallMFA]),
+      dialyzer_statistics:increment_known_none_bug(?MODULE),
+      dialyzer_plt:lookup(Plt, HandleCallMFA);
+    T ->
+      % handle_call with arity found in Plt
+      ?log("[TYPESIG]: Lookup type found for Plt lookup with arity~n~n"),
+      dialyzer_statistics:increment_counter_call_arity(?MODULE),
+      T
+  end,
+
+  ?log("[TYPESIG]: Final result of Plt lookup: ~n~p~n~n", [LookupType]),
+
+  case LookupType of
+    none ->
+      % gen_server:call is being used in more scenarios than just our discrepancies.
+      % We therefore have to make sure that when nothing is found in the PLT, we do what Dialyzer normally does.
+
+      ?log("[TYPESIG]: Fallback to Dialyzer lookup: any()~n~n"),
+
+      % Increment handle_call lookup failed counter
+      dialyzer_statistics:increment_counter_call_lookup_failed(?MODULE),
+
+      PltRes = dialyzer_plt:lookup(Plt, InputMFA),
+      get_plt_constr_contract(InputMFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs);
+    {value, {ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+      % Increment handle_call  counter
+      dialyzer_statistics:increment_counter_call(?MODULE),
+
+      % Get the 3 arguments to handle_call.
+      % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
+      % then we are pulling out {my_server_api, Arg}
+      [InputTypes, _, _] = InputTypesWrapper,
+
+      % Get the return types of the handle_call.
+      % ReturnTypeTag --> type of the returned element, can be tuple or tuple_set
+      % If handle_call returns only a single type then it is a tuple
+      % If handle_call returns multiple different types then it is a tuple_set
+      % ReturnTypesWrapper --> either a single tuple or a list of tuples (tuple_set)
+      {_, ReturnTypeTag, ReturnTypesWrapper, _} = ReturnTypesWrapperWrapper,
+      ReturnTypes =
+        case ReturnTypeTag of
+          tuple -> get_tuple_return_type(ReturnTypesWrapper);
+          tuple_set -> get_tuple_set_return_type(ReturnTypesWrapper);
+          _ -> any
+        end,
+
+      % Get statistics on any reached in success typing
+      case ReturnTypes of
+        any -> dialyzer_statistics:increment_counter_any_succ(?MODULE);
+        _ -> ok
+      end,
+
+      ?log("[TYPESIG]: Result of success typing for input types: ~n~p~n~n", [InputTypes]),
+      ?log("[TYPESIG]: Result of success typing for return types: ~n~p~n~n", [ReturnTypes]),
+
+      GenServerInput =
+        case Arity of
+          2 -> [any, InputTypes];
+          3 -> [any, InputTypes, any]
+        end,
+
+      Contract =
+        case lists:member(HandleCallMFA, SCCMFAs) of
+          true -> none;
+          false -> dialyzer_plt:lookup_contract(Plt, HandleCallMFA)
+        end,
+
+      case Contract of
+        none ->
+          % PltRes is always of type {'value', {.., ..}} defined above
+          state__store_conj_lists([Dst | ArgVars], sub, [ReturnTypes | GenServerInput], State);
+        {value, #contract{args = GenArgs} = C} ->
+          % PltRes is always of type {'value', {.., ..}} defined above
+          %% Need to combine the contract with the success typing.
+          % Payload to handle_call --> e.g. {my_api_server, Arg}
+          [RequestType, _, _] = GenArgs,
+          % Based on the number of arguments to gen_server:call we need to make sure we match that number
+          NewGenArgs =
+            case Arity of
+              % [ServerRef, Request] --> [pid(), {my_api_server, Arg}]
+              2 -> [any, RequestType];
+              % [ServerRef, Request, Timeout] --> [pid(), {my_api_server, Arg}, ?]
+              3 -> [any, RequestType, any]
+            end,
+
+          {RetType, ArgCs} = {
+            ?mk_fun_var(
+              fun(Map) ->
+                OldArgTypes = lookup_type_list(ArgVars, Map),
+
+                % If we are doing gen_server:call, the arg types should be what we know followed by anything
+                % E.g. [any, {my_server_api, Arg}] --> [{my_server_api, Arg}, any, any]
+                % Has to e.g. match the spec handle_call({my_api_server, integer()}, _From, _State)
+                % Where we do not care about _From and _State
+                % We match on OldArgTypes to handle the Arity of the call
+                ArgTypes =
+                  case OldArgTypes of
+                    [_, RequestType1] -> [RequestType1, any, any];
+                    [_, RequestType1, _] -> [RequestType1, any, any]
+                  end,
+
+                % _Tag will probably also be either tuple or tuple_set. Both needs to be handled
+                {_C, Tag, ContractReturnType, _Qualifier} = get_contract_return(C#contract{args = NewGenArgs}, ArgTypes),
+                CRet =
+                  case Tag of
+                    tuple -> get_tuple_return_type(ContractReturnType);
+                    tuple_set -> get_tuple_set_return_type(ContractReturnType);
+                    _ -> any
+                  end,
+
+                % Get statistics on any reached in contract
+                case CRet of
+                  any -> dialyzer_statistics:increment_counter_any_contract(?MODULE);
+                  _ -> ok
+                end,
+
+                t_inf(CRet, ReturnTypes)
+              end, ArgVars
+            ),
+            [t_inf(X, Y) || {X, Y} <- lists:zip(NewGenArgs, GenServerInput)]
+          },
+          state__store_conj_lists([Dst | ArgVars], sub, [RetType | ArgCs], State)
+      end
+  end.
+
+get_plt_constr_contract(MFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs) ->
   Contract =
     case lists:member(MFA, SCCMFAs) of
       true -> none;
@@ -821,29 +1162,29 @@ get_plt_constr(MFA, Dst, ArgVars, State) ->
   case Contract of
     none ->
       case PltRes of
-	none -> State;
-	{value, {PltRetType, PltArgTypes}} ->
-	  state__store_conj_lists([Dst|ArgVars], sub,
-				  [PltRetType|PltArgTypes], State)
+        none -> State;
+        {value, {PltRetType, PltArgTypes}} ->
+          state__store_conj_lists([Dst|ArgVars], sub,
+            [PltRetType|PltArgTypes], State)
       end;
     {value, #contract{args = GenArgs} = C} ->
       {RetType, ArgCs} =
-	case PltRes of
-	  none ->
-	    {?mk_fun_var(fun(Map) ->
-			     ArgTypes = lookup_type_list(ArgVars, Map),
-                             get_contract_return(C, ArgTypes)
-			 end, ArgVars), GenArgs};
-	  {value, {PltRetType, PltArgTypes}} ->
-	    %% Need to combine the contract with the success typing.
-	    {?mk_fun_var(
-		fun(Map) ->
-		    ArgTypes = lookup_type_list(ArgVars, Map),
-                    CRet = get_contract_return(C, ArgTypes),
-		    t_inf(CRet, PltRetType)
-		end, ArgVars),
-	     [t_inf(X, Y) || {X, Y} <- lists:zip(GenArgs, PltArgTypes)]}
-	end,
+        case PltRes of
+          none ->
+            {?mk_fun_var(fun(Map) ->
+              ArgTypes = lookup_type_list(ArgVars, Map),
+              get_contract_return(C, ArgTypes)
+                         end, ArgVars), GenArgs};
+          {value, {PltRetType, PltArgTypes}} ->
+            %% Need to combine the contract with the success typing.
+            {?mk_fun_var(
+              fun(Map) ->
+                ArgTypes = lookup_type_list(ArgVars, Map),
+                CRet = get_contract_return(C, ArgTypes),
+                t_inf(CRet, PltRetType)
+              end, ArgVars),
+              [t_inf(X, Y) || {X, Y} <- lists:zip(GenArgs, PltArgTypes)]}
+        end,
       state__store_conj_lists([Dst|ArgVars], sub, [RetType|ArgCs], State)
   end.
 
