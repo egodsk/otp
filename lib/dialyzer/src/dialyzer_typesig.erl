@@ -1014,7 +1014,9 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
            {c, tuple, [{c, atom, [Atom], _} | _] = InputList, _} ->
              ?log("[TYPESIG]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, length(InputList)}]),
              dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
-           _ -> none
+           _ ->
+             ?log("[TYPESIG]: Plt lookup unknown type: ~n~p~n~n", [InputType]),
+             none
          end,
 
   ?log("[TYPESIG]: Result of Plt lookup with arity: ~n~p~n~n", [LookupTypeTemp]),
