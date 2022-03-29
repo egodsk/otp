@@ -3608,7 +3608,9 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module}) 
                      {c, tuple, [{c, atom, [Atom], _} | _] = InputList, _} ->
                        ?log("[DATAFLOW]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, length(InputList)}]),
                        dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
-                     _ -> none
+                     _ ->
+                       ?log("[DATAFLOW]: No matching input-type for: ~n~p~n~n", [InputType]),
+                       none
                    end,
 
   ?log("[DATAFLOW]: Result of Plt lookup with arity: ~n~p~n~n", [LookupTypeTemp]),
