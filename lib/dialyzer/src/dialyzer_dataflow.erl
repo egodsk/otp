@@ -3637,6 +3637,12 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module}) 
           _ -> any
         end,
 
+      % Get statistics on any reached in success typing
+      case ReturnTypes of
+        any -> dialyzer_statistics:increment_counter_any_succ(?MODULE);
+        _ -> ok
+      end,
+
       GenServerInput =
         case Arity of
           2 -> [any, InputTypes];

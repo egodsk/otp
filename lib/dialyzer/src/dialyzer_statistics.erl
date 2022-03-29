@@ -41,20 +41,6 @@ increment_counter_call_arity(dialyzer_typesig) ->
 increment_counter_call_arity(dialyzer_dataflow) ->
   gen_server:cast(?MODULE, {increment, call_arity_dataflow}).
 
-% genserver:call used
--spec increment_counter_call(any()) -> any().
-increment_counter_call(dialyzer_typesig) ->
-  gen_server:cast(?MODULE, {increment, call});
-increment_counter_call(dialyzer_dataflow) ->
-  gen_server:cast(?MODULE, {increment, call_dataflow}).
-
-% genserver:cast used
--spec increment_counter_cast(any()) -> any().
-increment_counter_cast(dialyzer_typesig) ->
-  gen_server:cast(?MODULE, {increment, cast});
-increment_counter_cast(dialyzer_dataflow) ->
-  gen_server:cast(?MODULE, {increment, cast_dataflow}).
-
 % genserver:call type with arity not found in PLT
 -spec increment_counter_call_arity_lookup_failed(any()) -> any().
 increment_counter_call_arity_lookup_failed(dialyzer_typesig) ->
@@ -62,12 +48,26 @@ increment_counter_call_arity_lookup_failed(dialyzer_typesig) ->
 increment_counter_call_arity_lookup_failed(dialyzer_dataflow) ->
   gen_server:cast(?MODULE, {increment, call_arity_lookup_failed_dataflow}).
 
+% genserver:call used
+-spec increment_counter_call(any()) -> any().
+increment_counter_call(dialyzer_typesig) ->
+  gen_server:cast(?MODULE, {increment, call});
+increment_counter_call(dialyzer_dataflow) ->
+  gen_server:cast(?MODULE, {increment, call_dataflow}).
+
 % genserver:call type not found in PLT
 -spec increment_counter_call_lookup_failed(any()) -> any().
 increment_counter_call_lookup_failed(dialyzer_typesig) ->
   gen_server:cast(?MODULE, {increment, call_lookup_failed});
 increment_counter_call_lookup_failed(dialyzer_dataflow) ->
   gen_server:cast(?MODULE, {increment, call_lookup_failed_dataflow}).
+
+% genserver:cast used
+-spec increment_counter_cast(any()) -> any().
+increment_counter_cast(dialyzer_typesig) ->
+  gen_server:cast(?MODULE, {increment, cast});
+increment_counter_cast(dialyzer_dataflow) ->
+  gen_server:cast(?MODULE, {increment, cast_dataflow}).
 
 % genserver:cast type not found in PLT
 -spec increment_counter_cast_lookup_failed(any()) -> any().
