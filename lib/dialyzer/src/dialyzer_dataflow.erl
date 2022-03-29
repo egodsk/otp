@@ -67,6 +67,16 @@
 	 t_map/0, t_map/1, t_is_singleton/2
      ]).
 
+% Add gen_server logging
+-define(GEN_SERVER_LOGGING, true).
+
+-ifdef(GEN_SERVER_LOGGING).
+-define(log(__String, __Args), io:format(__String, __Args)).
+-define(log(__String), io:format(__String)).
+-else.
+-define(log(__String, __Args), ok).
+-endif.
+
 %%-define(DEBUG, true).
 %%-define(DEBUG_PP, true).
 %%-define(DEBUG_TIME, true).
@@ -3593,24 +3603,35 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module}) 
   [_Pid, InputType] = As,
   LookupTypeTemp = case InputType of
                      {c, atom, [Atom], _} ->
+                       ?log("[DATAFLOW]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, 1}]),
                        dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, 1});
                      {c, tuple, [{c, atom, [Atom], _} | _] = InputList, _} ->
+                       ?log("[DATAFLOW]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, length(InputList)}]),
                        dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
                      _ -> none
                    end,
+
+  ?log("[DATAFLOW]: Result of Plt lookup with arity: ~n~p~n~n", [LookupTypeTemp]),
+
   LookupType = case LookupTypeTemp of
                  none ->
                    % handle_call with arity lookup failed
+                   ?log("[DATAFLOW]: Plt lookup for: ~n~p~n~n", [HandleCallMFA]),
                    dialyzer_statistics:increment_counter_call_arity_lookup_failed(?MODULE),
                    dialyzer_plt:lookup(Plt, HandleCallMFA);
                  T ->
                    % handle_call with arity lookup was successful
+                   ?log("[DATAFLOW]: Lookup type found for Plt lookup with arity~n~n"),
                    dialyzer_statistics:increment_counter_call_arity(?MODULE),
                    T
                end,
 
+  ?log("[DATAFLOW]: Final result of Plt lookup: ~n~p~n~n", [LookupType]),
+
   case LookupType of
     none ->
+      ?log("[DATAFLOW]: Fallback to Dialyzer lookup: any()~n~n"),
+
       dialyzer_statistics:increment_counter_call_lookup_failed(?MODULE),
       {MFA,
         dialyzer_plt:lookup(Plt, MFA),
@@ -3642,6 +3663,9 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module}) 
         any -> dialyzer_statistics:increment_counter_any_succ(?MODULE);
         _ -> ok
       end,
+
+      ?log("[DATAFLOW]: Result of success typing for input types: ~n~p~n~n", [InputTypes]),
+      ?log("[DATAFLOW]: Result of success typing for return types: ~n~p~n~n", [ReturnTypes]),
 
       GenServerInput =
         case Arity of
