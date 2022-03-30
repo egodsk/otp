@@ -721,8 +721,12 @@ table_all_modules(Tab) ->
 all_mods('$end_of_table', S) ->
   S;
 all_mods({ListsOfKeys, Cont}, S) ->
+  FilteredListsOfKeys = lists:filter(fun(E) -> case E of
+                                                 {_, _, _} -> true;
+                                                 _ -> false
+                                               end end, ListsOfKeys),
   S1 = lists:foldl(fun([{M, _F, _A}], S0) -> sets:add_element(M, S0)
-                   end, S, ListsOfKeys),
+                   end, S, FilteredListsOfKeys),
   all_mods(ets:match(Cont), S1).
 
 table_merge([H|T]) ->
