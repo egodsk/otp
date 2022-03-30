@@ -68,13 +68,14 @@
      ]).
 
 % Add gen_server logging
--define(GEN_SERVER_LOGGING, true).
+%%-define(GEN_SERVER_LOGGING, true).
 
 -ifdef(GEN_SERVER_LOGGING).
 -define(log(__String, __Args), io:format(__String, __Args)).
 -define(log(__String), io:format(__String)).
 -else.
 -define(log(__String, __Args), ok).
+-define(log(__String), ok).
 -endif.
 
 %%-define(DEBUG, true).
