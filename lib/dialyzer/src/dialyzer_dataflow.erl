@@ -402,6 +402,10 @@ traverse_list([], Map, State, Acc) ->
 %% Special instructions
 %%
 
+contract_return_type({M, cast, _}, _C) when M =:= 'gen_server'; M =:= 'Elixir.GenServer' ->
+  fun(_FunArgs) ->
+    {c,atom,[ok],unknown}
+  end;
 contract_return_type({M, call, _}, C) when M =:= 'gen_server'; M =:= 'Elixir.GenServer' ->
   fun(FunArgs) ->
     R = case FunArgs of
