@@ -3600,7 +3600,7 @@ state__fun_info(Fun, #state{callgraph = CG, fun_tab = FunTab, plt = PLT}) ->
 state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module}) when M =:= 'gen_server'; M =:= 'Elixir.GenServer' ->
   HandleCallMFA = {Module, handle_call, 3},
 
-  [_Pid, InputType] = As,
+  [_Pid, InputType | _Rest] = As,
   LookupTypeTemp = case InputType of
                      {c, atom, [Atom], _} ->
                        ?log("[DATAFLOW]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, 1}]),

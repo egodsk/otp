@@ -1006,7 +1006,9 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
   Module = State#state.module,
   HandleCallMFA = {Module, handle_call, 3},
 
-  [_Pid, InputType] = ArgVars,
+  ?log("[TYPESIG]: ArgVars is ~n~p~n~n", [ArgVars]),
+
+  [_Pid, InputType | _Rest] = ArgVars,
   LookupTypeTemp = case InputType of
            {c, atom, [Atom], _} ->
              ?log("[TYPESIG]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, 1}]),
