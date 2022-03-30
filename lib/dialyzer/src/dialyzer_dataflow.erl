@@ -3653,13 +3653,15 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module}) 
       % If handle_call returns only a single type then it is a tuple
       % If handle_call returns multiple different types then it is a tuple_set
       % ReturnTypesWrapper --> either a single tuple or a list of tuples (tuple_set)
-      {_, ReturnTypeTag, ReturnTypesWrapper, _} = ReturnTypesWrapperWrapper,
-      ReturnTypes =
-        case ReturnTypeTag of
-          tuple -> get_tuple_return_type(ReturnTypesWrapper);
-          tuple_set -> get_tuple_set_return_type(ReturnTypesWrapper);
-          _ -> any
-        end,
+      ReturnTypes = case ReturnTypesWrapperWrapper of
+                      {_, ReturnTypeTag, ReturnTypesWrapper, _} ->
+                        case ReturnTypeTag of
+                          tuple -> get_tuple_return_type(ReturnTypesWrapper);
+                          tuple_set -> get_tuple_set_return_type(ReturnTypesWrapper);
+                          _ -> any
+                        end;
+                      _ -> any
+                    end,
 
       % Get statistics on any reached in success typing
       case ReturnTypes of
