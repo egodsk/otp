@@ -1,4 +1,6 @@
 # Match at any level.
+output
+.DS_Store
 
 # emacs
 *~

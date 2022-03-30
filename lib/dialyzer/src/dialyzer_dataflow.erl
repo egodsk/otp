@@ -67,6 +67,17 @@
 	 t_map/0, t_map/1, t_is_singleton/2
      ]).
 
+% Add gen_server logging
+-define(GEN_SERVER_LOGGING, true).
+
+-ifdef(GEN_SERVER_LOGGING).
+-define(log(__String, __Args), io:format(__String, __Args)).
+-define(log(__String), io:format(__String)).
+-else.
+-define(log(__String, __Args), ok).
+-define(log(__String), ok).
+-endif.
+
 %%-define(DEBUG, true).
 %%-define(DEBUG_PP, true).
 %%-define(DEBUG_TIME, true).
@@ -391,6 +402,39 @@ traverse_list([], Map, State, Acc) ->
 %% Special instructions
 %%
 
+contract_return_type({M, cast, _}, _C) when M =:= 'gen_server'; M =:= 'Elixir.GenServer' ->
+  fun(_FunArgs) ->
+    {c,atom,[ok],unknown}
+  end;
+contract_return_type({M, call, _}, C) when M =:= 'gen_server'; M =:= 'Elixir.GenServer' ->
+  fun(FunArgs) ->
+    R = case FunArgs of
+          [_, RT] -> dialyzer_contracts:get_contract_return(C, [RT, any, any]);
+          [_, RT, _] -> dialyzer_contracts:get_contract_return(C, [RT, any, any])
+        end,
+
+    ReturnType = case R of
+                   {_C, Tag, ContractReturnType, _Qualifier} ->
+                     case Tag of
+                       tuple -> get_tuple_return_type(ContractReturnType);
+                       tuple_set -> get_tuple_set_return_type(ContractReturnType);
+                       _ -> any
+                     end;
+                   _ -> R
+                 end,
+
+    case ReturnType of
+      any -> dialyzer_statistics:increment_counter_any_contract(?MODULE);
+      _ -> ok
+    end,
+
+    ReturnType
+  end;
+contract_return_type(_, C) ->
+  fun(FunArgs) ->
+    dialyzer_contracts:get_contract_return(C, FunArgs)
+  end.
+
 handle_apply(Tree, Map, State) ->
   Args = cerl:apply_args(Tree),
   Op = cerl:apply_op(Tree),
@@ -490,9 +534,7 @@ handle_apply_or_call([{TypeOfApply, {Fun, Sig, Contr, LocalRet}}|Left],
   {CArgs, CRange} =
     case Contr of
       {value, #contract{args = As} = C} ->
-	{As, fun(FunArgs) ->
-		 dialyzer_contracts:get_contract_return(C, FunArgs)
-	     end};
+	{As, contract_return_type(Fun, C)};
       none -> GenSig
     end,
   {BifArgs, BifRange} =
@@ -987,7 +1029,7 @@ handle_call(Tree, Map, State) ->
 	  %% XXX: Consider doing this for all combinations of MF
 	  case {t_atom_vals(MType), t_atom_vals(FType)} of
 	    {[MAtom], [FAtom]} ->
-	      FunInfo = [{remote, state__fun_info({MAtom, FAtom, length(Args)},
+	      FunInfo = [{remote, state__fun_info({MAtom, FAtom, length(Args)}, As,
 						  State1)}],
 	      handle_apply_or_call(FunInfo, Args, As, Map2, Tree, State1);
 	    {_MAtoms, _FAtoms} ->
@@ -3481,8 +3523,64 @@ state__lookup_call_site(Tree, #state{callgraph = Callgraph}) ->
   Label = get_label(Tree),
   dialyzer_callgraph:lookup_call_site(Label, Callgraph).
 
+get_tuple_return_type(ReturnType) ->
+  case ReturnType of
+    [{c, atom, [reply], _}, ReplyType, _] -> ReplyType;
+    [{c, atom, [reply], _}, ReplyType, _, _] -> ReplyType;
+    [{c, atom, [stop], _}, _, ReplyType, _] -> ReplyType;
+    _ -> any
+  end.
+
+get_tuple_set_return_type(ReturnTypeList) ->
+  Elements = lists:flatten([E || {_Arity, E} <- ReturnTypeList]),
+  [RFirst | RRest] = [get_tuple_return_type(H) || {_C, _Tag, H, _Unknown} <- Elements],
+  lists:foldl(fun(X, Acc) -> erl_types:t_sup(X, Acc) end, RFirst, RRest).
+
 state__fun_info(external, #state{}) ->
   external;
+state__fun_info({M, cast, _Arity} = MFA, #state{plt = PLT, module = Module}) when M =:= 'gen_server'; M =:= 'Elixir.GenServer' ->
+  HandleCastMFA = {Module, handle_cast, 2},
+  case dialyzer_plt:lookup(PLT, HandleCastMFA) of
+    none ->
+      % handle_cast lookup failed in Plt
+      dialyzer_statistics:increment_counter_cast_lookup_failed(?MODULE),
+      {MFA,
+        dialyzer_plt:lookup(PLT, MFA),
+        dialyzer_plt:lookup_contract(PLT, MFA),
+        t_any()};
+    {value, {_ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+      % handle_cast found in Plt
+      dialyzer_statistics:increment_counter_cast(?MODULE),
+
+      % Get the 2 arguments to handle_cast.
+      % E.g. if handle_cast looks like handle_cast({my_server_api, Arg}, _State)
+      % then we are pulling out {my_server_api, Arg}
+      [InputTypes, _] = InputTypesWrapper,
+
+      ReturnTypes = {c, atom, [ok], unknown},
+      GenServerInput = [any, InputTypes],
+
+      Contract = dialyzer_plt:lookup_contract(PLT, HandleCastMFA),
+      NewContract = case Contract of
+                      none ->
+                        Contract;
+                      {value, #contract{args = GenArgs} = C} ->
+                        % contract{
+                        % {value, #contract{contracts = ?, args = first element of current args, forms = ?}}
+                        [RequestType, _] = GenArgs,
+                        NewGenArgs = [any, RequestType],
+
+                        {'value', C#contract{args = NewGenArgs}}
+                    end,
+
+      % TODO: Check if contract is any here
+
+      {MFA,
+        {'value', {ReturnTypes, GenServerInput}},
+        NewContract,
+        t_any()}
+  end;
+
 state__fun_info({_, _, _} = MFA, #state{plt = PLT}) ->
   {MFA,
    dialyzer_plt:lookup(PLT, MFA),
@@ -3503,6 +3601,114 @@ state__fun_info(Fun, #state{callgraph = CG, fun_tab = FunTab, plt = PLT}) ->
     end,
   ?debug("LocalRet: ~ts\n", [t_to_string(LocalRet)]),
   {Fun, Sig, Contract, LocalRet}.
+
+state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module}) when M =:= 'gen_server'; M =:= 'Elixir.GenServer' ->
+  HandleCallMFA = {Module, handle_call, 3},
+
+  [_Pid, InputType | _Rest] = As,
+  LookupTypeTemp = case InputType of
+                     {c, atom, [Atom], _} ->
+                       ?log("[DATAFLOW]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, 1}]),
+                       dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, 1});
+                     {c, tuple, [{c, atom, [Atom], _} | _] = InputList, _} ->
+                       ?log("[DATAFLOW]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, length(InputList)}]),
+                       dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
+                     _ ->
+                       ?log("[DATAFLOW]: No matching input-type for: ~n~p~n~n", [InputType]),
+                       none
+                   end,
+
+  ?log("[DATAFLOW]: Result of Plt lookup with arity: ~n~p~n~n", [LookupTypeTemp]),
+
+  LookupType = case LookupTypeTemp of
+                 none ->
+                   % handle_call with arity lookup failed
+                   ?log("[DATAFLOW]: Plt lookup for: ~n~p~n~n", [HandleCallMFA]),
+                   dialyzer_statistics:increment_counter_call_arity_lookup_failed(?MODULE),
+                   dialyzer_plt:lookup(Plt, HandleCallMFA);
+                 T ->
+                   % handle_call with arity lookup was successful
+                   ?log("[DATAFLOW]: Lookup type found for Plt lookup with arity~n~n"),
+                   dialyzer_statistics:increment_counter_call_arity(?MODULE),
+                   T
+               end,
+
+  ?log("[DATAFLOW]: Final result of Plt lookup: ~n~p~n~n", [LookupType]),
+
+  case LookupType of
+    none ->
+      ?log("[DATAFLOW]: Fallback to Dialyzer lookup: any()~n~n"),
+
+      dialyzer_statistics:increment_counter_call_lookup_failed(?MODULE),
+      {MFA,
+        dialyzer_plt:lookup(Plt, MFA),
+        dialyzer_plt:lookup_contract(Plt, MFA),
+        t_any()};
+    {value, {ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+      dialyzer_statistics:increment_counter_call(?MODULE),
+
+      % Get the 3 arguments to handle_call.
+      % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
+      % then we are pulling out {my_server_api, Arg}
+      [InputTypes, _, _] = InputTypesWrapper,
+
+      % Get the return types of the handle_call.
+      % ReturnTypeTag --> type of the returned element, can be tuple or tuple_set
+      % If handle_call returns only a single type then it is a tuple
+      % If handle_call returns multiple different types then it is a tuple_set
+      % ReturnTypesWrapper --> either a single tuple or a list of tuples (tuple_set)
+      ReturnTypes = case ReturnTypesWrapperWrapper of
+                      {_, ReturnTypeTag, ReturnTypesWrapper, _} ->
+                        case ReturnTypeTag of
+                          tuple -> get_tuple_return_type(ReturnTypesWrapper);
+                          tuple_set -> get_tuple_set_return_type(ReturnTypesWrapper);
+                          _ -> any
+                        end;
+                      _ -> any
+                    end,
+
+      % Get statistics on any reached in success typing
+      case ReturnTypes of
+        any -> dialyzer_statistics:increment_counter_any_succ(?MODULE);
+        _ -> ok
+      end,
+
+      ?log("[DATAFLOW]: Result of success typing for input types: ~n~p~n~n", [InputTypes]),
+      ?log("[DATAFLOW]: Result of success typing for return types: ~n~p~n~n", [ReturnTypes]),
+
+      GenServerInput =
+        case Arity of
+          2 -> [any, InputTypes];
+          3 -> [any, InputTypes, any]
+        end,
+
+      Contract = dialyzer_plt:lookup_contract(Plt, HandleCallMFA),
+      NewContract = case Contract of
+                      none ->
+                        Contract;
+                      {value, #contract{args = GenArgs} = C} ->
+                        % contract{
+                        % {value, #contract{contracts = ?, args = first element of current args, forms = ?}}
+                        [RequestType, _, _] = GenArgs,
+                        % Based on the number of arguments to gen_server:call we need to make sure we match that number
+                        NewGenArgs =
+                          case Arity of
+                            % [ServerRef, Request] --> [pid(), {my_api_server, Arg}]
+                            2 -> [any, RequestType];
+                            % [ServerRef, Request, Timeout] --> [pid(), {my_api_server, Arg}, ?]
+                            3 -> [any, RequestType, any]
+                          end,
+
+                        {'value', C#contract{args = NewGenArgs}}
+                    end,
+      % TODO: Check if contract is any here
+      {MFA,
+        {'value', {ReturnTypes, GenServerInput}},
+        NewContract,
+        t_any()}
+  end;
+state__fun_info(MFA, _As, State) ->
+  state__fun_info(MFA, State).
 
 forward_args(Fun, ArgTypes, #state{work = Work, fun_tab = FunTab} = State) ->
   {NewArgTypes, OldOut, Fixpoint} =
