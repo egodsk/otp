@@ -33,7 +33,7 @@
 	 get_default_plt/0,
          get_module_types/2,
          get_exported_types/1,
-	 insert_list/2,
+	 insert_list/2, insert_gen_server_list/2,
 	 insert_contract_list/2,
 	 insert_callbacks/2,
 	 insert_types/2,
@@ -76,6 +76,7 @@
 %%----------------------------------------------------------------------
 
 -record(plt, {info      :: ets:tid(), %% {mfa() | integer(), ret_args_types()}
+              info_gen_server      :: ets:tid(), %% {mfa() | integer(), ret_args_types()}
               types     :: ets:tid(), %% {module(), erl_types:type_table()}
               contracts :: ets:tid(), %% {mfa(), #contract{}}
               callbacks :: ets:tid(), %% {module(),
@@ -106,13 +107,14 @@
 -spec new() -> plt().
 
 new() ->
-  [ETSInfo, ETSContracts] =
+  [ETSInfo, ETSContracts, ETSGenServer] =
     [ets:new(Name, [public]) ||
-      Name <- [plt_info, plt_contracts]],
+      Name <- [plt_info, plt_contracts, plt_info_gen_server]],
   [ETSTypes, ETSCallbacks, ETSExpTypes] =
     [ets:new(Name, [compressed, public]) ||
       Name <- [plt_types, plt_callbacks, plt_exported_types]],
   #plt{info = ETSInfo,
+       info_gen_server = ETSGenServer,
        types = ETSTypes,
        contracts = ETSContracts,
        callbacks = ETSCallbacks,
@@ -173,6 +175,11 @@ lookup_callbacks(#plt{callbacks = ETSCallbacks}, Mod) when is_atom(Mod) ->
 
 -type ret_args_types() :: {erl_types:erl_type(), [erl_types:erl_type()]}.
 
+-spec insert_gen_server_list(plt(), [{mfa() | integer(), ret_args_types()}]) -> plt().
+insert_gen_server_list(#plt{info_gen_server = InfoGenServer} = PLT, List) ->
+  true = ets:insert(InfoGenServer, List),
+  PLT.
+
 -spec insert_list(plt(), [{mfa() | integer(), ret_args_types()}]) -> plt().
 
 insert_list(#plt{info = Info} = PLT, List) ->
@@ -182,12 +189,14 @@ insert_list(#plt{info = Info} = PLT, List) ->
 -spec lookup(plt(), integer() | mfa_patt()) ->
         'none' | {'value', ret_args_types()}.
 lookup(Plt, {M, F, _A, Atom, Arity} = MFAAA) when is_atom(M), is_atom(F), is_atom(Atom), is_integer(Arity) ->
-  lookup_1(Plt, MFAAA);
+  lookup_gen_server(Plt, MFAAA);
 lookup(Plt, {M, F, _} = MFA) when is_atom(M), is_atom(F) ->
   lookup_1(Plt, MFA);
 lookup(Plt, Label) when is_integer(Label) ->
   lookup_1(Plt, Label).
 
+lookup_gen_server(#plt{info_gen_server = InfoGenServer}, MFAorLabel) ->
+  ets_table_lookup(InfoGenServer, MFAorLabel).
 lookup_1(#plt{info = Info}, MFAorLabel) ->
   ets_table_lookup(Info, MFAorLabel).
 
@@ -372,9 +381,10 @@ merge_plts(List) ->
 %% key is a module(), sometimes an mfa(). It boils down to checking if
 %% any module occurs more than once.
 merge_disj_plts(List) ->
-  {InfoList, TypesList, ExpTypesList, ContractsList, CallbacksList} =
+  {InfoList, InfoGenServerList, TypesList, ExpTypesList, ContractsList, CallbacksList} =
     group_fields(List),
   #plt{info = table_disj_merge(InfoList),
+       info_gen_server = table_disj_merge(InfoGenServerList),
        types = table_disj_merge(TypesList),
        exported_types = sets_disj_merge(ExpTypesList),
        contracts = table_disj_merge(ContractsList),
@@ -383,11 +393,12 @@ merge_disj_plts(List) ->
 
 group_fields(List) ->
   InfoList = [Info || #plt{info = Info} <- List],
+  InfoGenServerList = [InfoGenServer || #plt{info_gen_server = InfoGenServer} <- List],
   TypesList = [Types || #plt{types = Types} <- List],
   ExpTypesList = [ExpTypes || #plt{exported_types = ExpTypes} <- List],
   ContractsList = [Contracts || #plt{contracts = Contracts} <- List],
   CallbacksList = [Callbacks || #plt{callbacks = Callbacks} <- List],
-  {InfoList, TypesList, ExpTypesList, ContractsList, CallbacksList}.
+  {InfoList, InfoGenServerList, TypesList, ExpTypesList, ContractsList, CallbacksList}.
 
 -spec merge_plts_or_report_conflicts([file:filename()], [plt()]) -> plt().
 

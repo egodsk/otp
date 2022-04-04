@@ -269,9 +269,9 @@ store_gen_server_type_information([{DecoratedFunctionType, State} | Tail]) ->
   [InputType | _Rest1] = InputTypeWrapper,
   case InputType of
     {c,atom, [Atom], _} ->
-      dialyzer_plt:insert_list(State#state.plt, [{{M, F, A, Atom, 1}, FormattedFunctionType}]);
+      dialyzer_plt:insert_gen_server_list(State#state.plt, [{{M, F, A, Atom, 1}, FormattedFunctionType}]);
     {c,tuple, [{c,atom, [Atom], _} | _] = InputTypeList, _} ->
-      dialyzer_plt:insert_list(State#state.plt, [{{M, F, A, Atom, length(InputTypeList)}, FormattedFunctionType}]);
+      dialyzer_plt:insert_gen_server_list(State#state.plt, [{{M, F, A, Atom, length(InputTypeList)}, FormattedFunctionType}]);
     _ -> bad_match
   end,
   store_gen_server_type_information(Tail).
