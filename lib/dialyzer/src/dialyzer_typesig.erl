@@ -295,6 +295,32 @@ traverse_scc([{M,_,_}=MFA|Left], Codeserver, DefSet, AccState) ->
   DummyLetrec = cerl:c_letrec([Def], cerl:c_atom(foo)),
   TmpState2 = state__new_constraint_context(TmpState1),
   {NewAccState, _} = traverse(DummyLetrec, DefSet, TmpState2),
+
+  % TODO: fuck
+  {_, PossiblyCFun} = Def,
+  case is_tree_handle_call(PossiblyCFun) of
+    true ->
+      GroupByFunction = fun ({_ClauseTag, _ClauseLabel, ClauseArgs, _ClauseGuard, _ClauseBody}) ->
+        [InputTuple, _From, _State] = ClauseArgs,
+        case InputTuple of
+          {c_literal, _List, Atom} -> {Atom, 1};
+          {c_tuple, _InputLabel, [{c_literal, _List, Atom} | _Tail] = InputList} -> {Atom, length(InputList)};
+          _ -> -1
+        end
+                        end,
+      GroupBy = fun(F, L) -> lists:foldr(fun({K,V}, D) -> dict:append(K, V, D) end , dict:new(), [ {F(X), X} || X <- L ]) end,
+
+      {CVar, {CFun1, CFun2, CFun3, {CCase1, CCase2, CCase3, CClauses}}} = Def,
+      Dict = GroupBy(GroupByFunction, CClauses),
+      DictList = dict:to_list(Dict),
+
+      CFuns = [{CVar, {CFun1, CFun2, CFun3, {CCase1, CCase2, CCase3, BodyClause}}} || {_Key, BodyClause} <- DictList],
+      States = [traverse(cerl:c_letrec([DummyCFun], cerl:c_atom(foo)), DefSet, TmpState2) || DummyCFun <- CFuns],
+      DecoratedFunctionTypesWithState = [decorate_functions_from_constraints(traverse_scc(Left, Codeserver, DefSet, S)) || {S, _} <- States],
+      store_gen_server_type_information(DecoratedFunctionTypesWithState);
+    false -> ok
+  end,
+  % END TODO
   traverse_scc(Left, Codeserver, DefSet, NewAccState);
 traverse_scc([], _Codeserver, _DefSet, AccState) ->
   AccState.
@@ -460,30 +486,6 @@ traverse(Tree, DefinedVars, State) ->
       State5 = state__store_conj_list([OldCs, Ref], State4),
       State6 = state__store_fun_arity(Tree, State5),
       State7 = state__add_fun_to_scc(TreeVar, State6),
-
-      % Split unioned handle_call type information and store in ETS
-      case is_tree_handle_call(Tree) of
-        true ->
-          {BodyTag, BodyLabels, BodyValues, BodyClauses} = Body,
-
-          GroupByFunction = fun ({_ClauseTag, _ClauseLabel, ClauseArgs, _ClauseGuard, _ClauseBody}) ->
-                [InputTuple, _From, _State] = ClauseArgs,
-                case InputTuple of
-                  {c_literal, _List, Atom} -> {Atom, 1};
-                  {c_tuple, _InputLabel, [{c_literal, _List, Atom} | _Tail] = InputList} -> {Atom, length(InputList)};
-                  _ -> -1
-                end
-            end,
-          GroupBy = fun(F, L) -> lists:foldr(fun({K,V}, D) -> dict:append(K, V, D) end , dict:new(), [ {F(X), X} || X <- L ]) end,
-
-          Dict = GroupBy(GroupByFunction, BodyClauses),
-          DictList = dict:to_list(Dict),
-          States = [build_state_constraints_from_body(Tree, {BodyTag, BodyLabels, BodyValues, BodyClause}, DefinedVars, State) || {_Key, BodyClause} <- DictList],
-          DecoratedFunctionTypesWithState = [decorate_functions_from_constraints(S) || S <- States],
-          store_gen_server_type_information(DecoratedFunctionTypesWithState);
-        false ->
-          ok
-      end,
       {State7, TreeVar};
     'let' ->
       Vars = cerl:let_vars(Tree),
