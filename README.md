@@ -102,3 +102,9 @@ Erlang/OTP is released under the [Apache License 2.0](http://www.apache.org/lice
 
 ## Awesome-Erlang
 You can find more projects, tools and articles related to Erlang/OTP on the [awesome-erlang list](https://github.com/drobakowski/awesome-erlang). Add your project there.
+
+
+## Up and running locally on mac
+```./configure --prefix=$(pwd)/output --with-ssl=$(brew --prefix openssl)```
+```make```
+```make install```
