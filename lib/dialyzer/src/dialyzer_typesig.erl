@@ -266,7 +266,7 @@ store_gen_server_type_information([]) -> ok;
 store_gen_server_type_information([{DecoratedFunctionType, State} | Tail]) ->
   [{{M, F, A}, FormattedFunctionType} | _Rest] = dialyzer_succ_typings:format_succ_types(DecoratedFunctionType, State#state.callgraph),
   {_ReturnType, InputTypeWrapper} = FormattedFunctionType,
-  [InputType, _, _] = InputTypeWrapper,
+  [InputType | _Rest1] = InputTypeWrapper,
   case InputType of
     {c,atom, [Atom], _} ->
       dialyzer_plt:insert_list(State#state.plt, [{{M, F, A, Atom, 1}, FormattedFunctionType}]);
