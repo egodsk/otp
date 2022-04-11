@@ -130,7 +130,7 @@
 -define(INTERNAL_TYPE_LIMIT, 5).
 
 % Add gen_server logging
--define(GEN_SERVER_LOGGING, true).
+%-define(GEN_SERVER_LOGGING, true).
 
 -ifdef(GEN_SERVER_LOGGING).
 -define(log(__String, __Args), io:format(__String, __Args)).
@@ -1008,6 +1008,7 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
   SCCMFAs = State#state.mfas,
   Module = State#state.module,
   HandleCallMFA = {Module, handle_call, 3},
+  T = State#state.
 
   ?log("[TYPESIG]: ArgVars is ~n~p~n~n", [ArgVars]),
 
