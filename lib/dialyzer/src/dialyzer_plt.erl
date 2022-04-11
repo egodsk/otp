@@ -718,10 +718,13 @@ table_all_modules(Tab) ->
   Ks = ets:match(Tab, {'$1', '_'}, 100),
   all_mods(Ks, sets:new()).
 
+fold_fun([{M, _F, _A}], S0) -> sets:add_element(M, S0);
+fold_fun([{M, _F, _A, _, _}], S0) -> sets:add_element(M, S0).
+
 all_mods('$end_of_table', S) ->
   S;
 all_mods({ListsOfKeys, Cont}, S) ->
-  S1 = lists:foldl(fun([{M, _F, _A}], S0) -> sets:add_element(M, S0)
+  S1 = lists:foldl(fun(MFA, S0) -> fold_fun(MFA, S0)
                    end, S, ListsOfKeys),
   all_mods(ets:match(Cont), S1).
 
