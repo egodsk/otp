@@ -1008,7 +1008,6 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
   SCCMFAs = State#state.mfas,
   Module = State#state.module,
   HandleCallMFA = {Module, handle_call, 3},
-  T = State#state.
 
   ?log("[TYPESIG]: ArgVars is ~n~p~n~n", [ArgVars]),
 
