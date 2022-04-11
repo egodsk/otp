@@ -400,6 +400,7 @@ do_analysis(Files, Options, Plt, PltInfo) ->
   Return = cl_loop(State3),
   {T2, _} = statistics(wall_clock),
   report_elapsed_time(T1, T2, Options),
+  io:format("New statistics for gen_server: ~n~p~n", [dialyzer_statistics:get_new_statistics()]),
   io:format("Statistics for gen_server: ~n~p~n", [dialyzer_statistics:get_statistics()]),
   Return.
 

@@ -824,8 +824,9 @@ which(Module, Path) when is_atom(Module) ->
       Filename :: file:filename(),
       Absname :: file:filename().
 where_is_file(File) when is_list(File) ->
-    Path = get_path(),
-    where_is_file(Path, File).
+  Path = get_path(),
+  io:format("~nPath: ~p~n", [Path]),
+  where_is_file(Path, File).
 
 %% To avoid unnecessary work when looking at many modules, this also
 %% accepts pairs of directories and pre-fetched contents in the path

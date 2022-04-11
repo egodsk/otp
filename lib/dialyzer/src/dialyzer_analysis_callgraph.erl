@@ -125,7 +125,7 @@ analysis_start(Parent, Analysis, LegalWarnings) ->
 			  include_dirs = Analysis#analysis.include_dirs,
 			  plt = Plt,
 			  parent = Parent,
-                          legal_warnings = LegalWarnings,
+              legal_warnings = LegalWarnings,
 			  start_from = Analysis#analysis.start_from,
 			  use_contracts = Analysis#analysis.use_contracts,
 			  timing_server = Analysis#analysis.timing_server,
@@ -145,10 +145,18 @@ analysis_start(Parent, Analysis, LegalWarnings) ->
   Exports = dialyzer_codeserver:get_exports(NewCServer),
   NonExports = sets:subtract(sets:from_list(AllNodes), Exports),
   NonExportsList = sets:to_list(NonExports),
+
+  % Add gen_server warnings flag
+  NewCallgraph0 =
+    case ordsets:is_element(?WARN_GEN_SERVER, LegalWarnings) of
+      true -> dialyzer_callgraph:put_gen_server_detection(true, Callgraph);
+      false -> Callgraph
+    end,
+
   NewCallgraph =
     case Analysis#analysis.race_detection of
-      true -> dialyzer_callgraph:put_race_detection(true, Callgraph);
-      false -> Callgraph
+      true -> dialyzer_callgraph:put_race_detection(true, NewCallgraph0);
+      false -> NewCallgraph0
     end,
   State2 = analyze_callgraph(NewCallgraph, State1),
   #analysis_state{plt = Plt2,

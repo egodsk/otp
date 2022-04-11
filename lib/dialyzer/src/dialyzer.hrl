@@ -55,6 +55,7 @@
 -define(WARN_UNDEFINED_CALLBACK, warn_undefined_callbacks).
 -define(WARN_UNKNOWN, warn_unknown).
 -define(WARN_MAP_CONSTRUCTION, warn_map_construction).
+-define(WARN_GEN_SERVER, warn_gen_server).
 
 %%
 %% The following type has double role:
@@ -71,7 +72,8 @@
                        | ?WARN_NOT_CALLED | ?WARN_OPAQUE
                        | ?WARN_RACE_CONDITION | ?WARN_RETURN_NO_RETURN
                        | ?WARN_RETURN_ONLY_EXIT | ?WARN_UNDEFINED_CALLBACK
-                       | ?WARN_UNKNOWN | ?WARN_UNMATCHED_RETURN.
+                       | ?WARN_UNKNOWN | ?WARN_UNMATCHED_RETURN
+                        | ?WARN_GEN_SERVER.
 
 %%
 %% This is the representation of each warning as they will be returned

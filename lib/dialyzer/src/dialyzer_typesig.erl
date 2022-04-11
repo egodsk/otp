@@ -130,7 +130,7 @@
 -define(INTERNAL_TYPE_LIMIT, 5).
 
 % Add gen_server logging
-%-define(GEN_SERVER_LOGGING, true).
+-define(GEN_SERVER_LOGGING, true).
 
 -ifdef(GEN_SERVER_LOGGING).
 -define(log(__String, __Args), io:format(__String, __Args)).
@@ -296,31 +296,36 @@ traverse_scc([{M,_,_}=MFA|Left], Codeserver, DefSet, AccState) ->
   TmpState2 = state__new_constraint_context(TmpState1),
   {NewAccState, _} = traverse(DummyLetrec, DefSet, TmpState2),
 
-  % TODO: fuck
-  {_, PossiblyCFun} = Def,
-  case is_tree_handle_call(PossiblyCFun) of
+  % Check if genserver detection enabled
+  case dialyzer_callgraph:get_gen_server_detection(AccState#state.callgraph) of
     true ->
-      GroupByFunction = fun ({_ClauseTag, _ClauseLabel, ClauseArgs, _ClauseGuard, _ClauseBody}) ->
-        [InputTuple, _From, _State] = ClauseArgs,
-        case InputTuple of
-          {c_literal, _List, Atom} -> {Atom, 1};
-          {c_tuple, _InputLabel, [{c_literal, _List, Atom} | _Tail] = InputList} -> {Atom, length(InputList)};
-          _ -> -1
-        end
-                        end,
-      GroupBy = fun(F, L) -> lists:foldr(fun({K,V}, D) -> dict:append(K, V, D) end , dict:new(), [ {F(X), X} || X <- L ]) end,
+      {_, PossiblyCFun} = Def,
+      case is_tree_handle_call(PossiblyCFun) of
+        true ->
+          GroupByFunction = fun({_ClauseTag, _ClauseLabel, ClauseArgs, _ClauseGuard, _ClauseBody}) ->
+            [InputTuple, _From, _State] = ClauseArgs,
+            case InputTuple of
+              {c_literal, _List, Atom} -> {Atom, 1};
+              {c_tuple, _InputLabel, [{c_literal, _List, Atom} | _Tail] = InputList} -> {Atom, length(InputList)};
+              _ -> -1
+            end
+                            end,
+          GroupBy = fun(F, L) ->
+            lists:foldr(fun({K, V}, D) -> dict:append(K, V, D) end, dict:new(), [{F(X), X} || X <- L]) end,
 
-      {CVar, {CFun1, CFun2, CFun3, {CCase1, CCase2, CCase3, CClauses}}} = Def,
-      Dict = GroupBy(GroupByFunction, CClauses),
-      DictList = dict:to_list(Dict),
+          {CVar, {CFun1, CFun2, CFun3, {CCase1, CCase2, CCase3, CClauses}}} = Def,
+          Dict = GroupBy(GroupByFunction, CClauses),
+          DictList = dict:to_list(Dict),
 
-      CFuns = [{CVar, {CFun1, CFun2, CFun3, {CCase1, CCase2, CCase3, BodyClause}}} || {_Key, BodyClause} <- DictList],
-      States = [traverse(cerl:c_letrec([DummyCFun], cerl:c_atom(foo)), DefSet, TmpState2) || DummyCFun <- CFuns],
-      DecoratedFunctionTypesWithState = [decorate_functions_from_constraints(traverse_scc(Left, Codeserver, DefSet, S)) || {S, _} <- States],
-      store_gen_server_type_information(DecoratedFunctionTypesWithState);
+          CFuns = [{CVar, {CFun1, CFun2, CFun3, {CCase1, CCase2, CCase3, BodyClause}}} || {_Key, BodyClause} <- DictList],
+          States = [traverse(cerl:c_letrec([DummyCFun], cerl:c_atom(foo)), DefSet, TmpState2) || DummyCFun <- CFuns],
+          DecoratedFunctionTypesWithState = [decorate_functions_from_constraints(traverse_scc(Left, Codeserver, DefSet, S)) || {S, _} <- States],
+          store_gen_server_type_information(DecoratedFunctionTypesWithState);
+        false -> ok
+      end;
     false -> ok
   end,
-  % END TODO
+
   traverse_scc(Left, Codeserver, DefSet, NewAccState);
 traverse_scc([], _Codeserver, _DefSet, AccState) ->
   AccState.
@@ -940,10 +945,19 @@ get_tuple_set_return_type(ReturnTypeList) ->
   lists:foldl(fun(X, Acc) -> erl_types:t_sup(X, Acc) end, RFirst, RRest).
 
 get_plt_constr({P, call, _} = InputMFA, Dst, ArgVars, State) when P =:= gen_server; P =:= 'Elixir.GenServer' ->
-  get_plt_constr_gen_server_handle_call(InputMFA, Dst, ArgVars, State);
+  case dialyzer_callgraph:get_gen_server_detection(State#state.callgraph) of
+    true -> get_plt_constr_gen_server_handle_call(InputMFA, Dst, ArgVars, State);
+    false -> get_plt_constr1(InputMFA, Dst, ArgVars, State)
+  end;
 get_plt_constr({P, cast, _} = InputMFA, Dst, ArgVars, State) when P =:= gen_server; P =:= 'Elixir.GenServer' ->
-  get_plt_constr_gen_server_handle_cast(InputMFA, Dst, ArgVars, State);
+  case dialyzer_callgraph:get_gen_server_detection(State#state.callgraph) of
+    true -> get_plt_constr_gen_server_handle_cast(InputMFA, Dst, ArgVars, State);
+    false -> get_plt_constr1(InputMFA, Dst, ArgVars, State)
+  end;
 get_plt_constr(MFA, Dst, ArgVars, State) ->
+  get_plt_constr1(MFA, Dst, ArgVars, State).
+
+get_plt_constr1(MFA, Dst, ArgVars, State) ->
   Plt = state__plt(State),
   PltRes = dialyzer_plt:lookup(Plt, MFA),
   SCCMFAs = State#state.mfas,

@@ -335,6 +335,8 @@ build_warnings([Opt|Opts], Warnings) ->
 	ordsets:add_element(?WARN_RETURN_ONLY_EXIT, Warnings);
       race_conditions ->
 	ordsets:add_element(?WARN_RACE_CONDITION, Warnings);
+      gen_server ->
+        ordsets:add_element(?WARN_GEN_SERVER, Warnings);
       no_missing_calls ->
         ordsets:del_element(?WARN_CALLGRAPH, Warnings);
       specdiffs ->
