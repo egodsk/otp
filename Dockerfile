@@ -1,6 +1,6 @@
 FROM buildpack-deps:bullseye
 
-ENV OTP_VERSION="24.3.3" \
+ENV OTP_VERSION="24.2.1" \
     REBAR3_VERSION="3.18.0"
 
 LABEL org.opencontainers.image.version=$OTP_VERSION
@@ -8,7 +8,7 @@ LABEL org.opencontainers.image.version=$OTP_VERSION
 # We'll install the build dependencies for erlang-odbc along with the erlang
 # build process:
 RUN set -xe \
-	&& OTP_DOWNLOAD_URL="https://github.com/egodsk/otp/tarball/test-branch" \
+	&& OTP_DOWNLOAD_URL="https://github.com/egodsk/otp/tarball/development" \
 	&& runtimeDeps='libodbc1 \
 			libsctp1 \
 			libwxgtk3.0' \
