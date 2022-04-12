@@ -145,6 +145,7 @@ handle_call(get_statistics, _From, Dictionary) ->
   AnySucc = dict:fetch(any_succ, Dictionary),
   AnyContract = dict:fetch(any_contract, Dictionary),
   KnownBug = dict:fetch(known_bug, Dictionary),
+
   CallArity = dict:fetch(call_arity, Dictionary),
   Call = dict:fetch(call, Dictionary),
   Cast = dict:fetch(cast, Dictionary),
