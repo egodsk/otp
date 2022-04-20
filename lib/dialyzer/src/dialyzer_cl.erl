@@ -400,8 +400,15 @@ do_analysis(Files, Options, Plt, PltInfo) ->
   Return = cl_loop(State3),
   {T2, _} = statistics(wall_clock),
   report_elapsed_time(T1, T2, Options),
-  io:format("New statistics for gen_server: ~n~p~n", [dialyzer_statistics:get_new_statistics()]),
-  io:format("Statistics for gen_server: ~n~p~n", [dialyzer_statistics:get_statistics()]),
+
+  % Display statistics if enabled
+  case ordsets:is_element(?WARN_GEN_SERVER, Options#options.legal_warnings) of
+    true ->
+      io:format("New statistics for gen_server: ~n~p~n", [dialyzer_statistics:get_new_statistics()]),
+      io:format("Statistics for gen_server: ~n~p~n", [dialyzer_statistics:get_statistics()]);
+    false -> ok
+  end,
+
   Return.
 
 convert_analysis_type(plt_check, true)   -> succ_typings;
