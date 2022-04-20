@@ -556,6 +556,8 @@ warning_options_msg() ->
      status. When using the Dialyzer from Erlang, warnings about unknown
      functions and types are returned; the default is not to return
      such warnings.
+   -Wgen_server ***
+     Include dialyzer analysis of gen_server modules.
 
 The following options are also available but their use is not recommended:
 (they are mostly for Dialyzer developers and internal debugging)
