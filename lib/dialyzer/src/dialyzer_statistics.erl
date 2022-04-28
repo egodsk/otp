@@ -8,90 +8,62 @@
 -export([stop/0]).
 
 % - for external use (note: calls are Synchronous)
--export([start/0, increment_counter_any_succ/1, increment_counter_any_contract/1, increment_counter_call/1, increment_counter_cast/1,
-  increment_counter_call_arity/1,
-  increment_known_none_bug/1,
-  increment_counter_call_arity_lookup_failed/1, increment_counter_call_lookup_failed/1, increment_counter_cast_lookup_failed/1, get_statistics/0, get_new_statistics/0]).
+-export([
+  start/0,
+  get_statistics/0,
+  typesig_increment_call_arity_lookup/0, typesig_increment_call_mfa_lookup/0, typesig_increment_call_generic/0,
+  typesig_increment_cast_mfa_lookup/0, typesig_increment_cast_generic/0,
+  typesig_increment_known_bug/0,
+  dataflow_increment_call_arity_lookup/0, dataflow_increment_call_mfa_lookup/0, dataflow_increment_call_generic/0,
+  dataflow_increment_cast_mfa_lookup/0, dataflow_increment_cast_generic/0
+]).
 
 % Client APIs
 
-% Any in success typing
--spec increment_counter_any_succ(any()) -> any().
-increment_counter_any_succ(dialyzer_typesig) ->
-  gen_server:cast(?MODULE, {increment, any_succ});
-increment_counter_any_succ(dialyzer_dataflow) ->
-  gen_server:cast(?MODULE, {increment, any_succ_dataflow}).
+%% TYPESIG
+%% CALL
+-spec typesig_increment_call_arity_lookup() -> ok.
+typesig_increment_call_arity_lookup() -> gen_server:cast(?MODULE, {increment, typesig_call_arity_lookup}).
 
-% Known bug
--spec increment_known_none_bug(any()) -> any().
-increment_known_none_bug(dialyzer_typesig) ->
-  gen_server:cast(?MODULE, {increment, known_bug}).
+-spec typesig_increment_call_mfa_lookup() -> ok.
+typesig_increment_call_mfa_lookup() -> gen_server:cast(?MODULE, {increment, typesig_call_mfa_lookup}).
 
-% Any in contract
--spec increment_counter_any_contract(any()) -> any().
-increment_counter_any_contract(dialyzer_typesig) ->
-  gen_server:cast(?MODULE, {increment, any_contract});
-increment_counter_any_contract(dialyzer_dataflow) ->
-  gen_server:cast(?MODULE, {increment, any_contract_dataflow}).
+-spec typesig_increment_call_generic() -> ok.
+typesig_increment_call_generic() -> gen_server:cast(?MODULE, {increment, typesig_call_generic}).
 
-% genserver:call with arity used
--spec increment_counter_call_arity(any()) -> any().
-increment_counter_call_arity(dialyzer_typesig) ->
-  gen_server:cast(?MODULE, {increment, call_arity}),
-  gen_server:cast(?MODULE, {increment, call_arity_success});
-increment_counter_call_arity(dialyzer_dataflow) ->
-  gen_server:cast(?MODULE, {increment, call_arity_dataflow}),
-  gen_server:cast(?MODULE, {increment, call_arity_success_dataflow}).
+%% CAST
+-spec typesig_increment_cast_mfa_lookup() -> ok.
+typesig_increment_cast_mfa_lookup() -> gen_server:cast(?MODULE, {increment, typesig_cast_mfa_lookup}).
 
+-spec typesig_increment_cast_generic() -> ok.
+typesig_increment_cast_generic() -> gen_server:cast(?MODULE, {increment, typesig_cast_generic}).
 
-% genserver:call type with arity not found in PLT
--spec increment_counter_call_arity_lookup_failed(any()) -> any().
-increment_counter_call_arity_lookup_failed(dialyzer_typesig) ->
-  gen_server:cast(?MODULE, {increment, call_arity_lookup_failed}),
-  gen_server:cast(?MODULE, {increment, call_arity_failed});
-increment_counter_call_arity_lookup_failed(dialyzer_dataflow) ->
-  gen_server:cast(?MODULE, {increment, call_arity_lookup_failed_dataflow}),
-  gen_server:cast(?MODULE, {increment, call_arity_failed_dataflow}).
+%% BUG
+-spec typesig_increment_known_bug() -> ok.
+typesig_increment_known_bug() -> gen_server:cast(?MODULE, {increment, known_bug}).
 
-% genserver:call used
--spec increment_counter_call(any()) -> any().
-increment_counter_call(dialyzer_typesig) ->
-  gen_server:cast(?MODULE, {increment, call}),
-  gen_server:cast(?MODULE, {increment, call_mfa_success});
-increment_counter_call(dialyzer_dataflow) ->
-  gen_server:cast(?MODULE, {increment, call_dataflow}),
-  gen_server:cast(?MODULE, {increment, call_mfa_success_dataflow}).
+%% DATAFLOW
+%% CALL
+-spec dataflow_increment_call_arity_lookup() -> ok.
+dataflow_increment_call_arity_lookup() -> gen_server:cast(?MODULE, {increment, dataflow_call_arity_lookup}).
 
-% genserver:call type not found in PLT
--spec increment_counter_call_lookup_failed(any()) -> any().
-increment_counter_call_lookup_failed(dialyzer_typesig) ->
-  gen_server:cast(?MODULE, {increment, call_lookup_failed}),
-  gen_server:cast(?MODULE, {increment, call_mfa_failed});
-increment_counter_call_lookup_failed(dialyzer_dataflow) ->
-  gen_server:cast(?MODULE, {increment, call_lookup_failed_dataflow}),
-  gen_server:cast(?MODULE, {increment, call_mfa_failed_dataflow}).
+-spec dataflow_increment_call_mfa_lookup() -> ok.
+dataflow_increment_call_mfa_lookup() -> gen_server:cast(?MODULE, {increment, dataflow_call_mfa_lookup}).
 
-% genserver:cast used
--spec increment_counter_cast(any()) -> any().
-increment_counter_cast(dialyzer_typesig) ->
-  gen_server:cast(?MODULE, {increment, cast});
-increment_counter_cast(dialyzer_dataflow) ->
-  gen_server:cast(?MODULE, {increment, cast_dataflow}).
+-spec dataflow_increment_call_generic() -> ok.
+dataflow_increment_call_generic() -> gen_server:cast(?MODULE, {increment, dataflow_call_generic}).
 
-% genserver:cast type not found in PLT
--spec increment_counter_cast_lookup_failed(any()) -> any().
-increment_counter_cast_lookup_failed(dialyzer_typesig) ->
-  gen_server:cast(?MODULE, {increment, cast_lookup_failed});
-increment_counter_cast_lookup_failed(dialyzer_dataflow) ->
-  gen_server:cast(?MODULE, {increment, cast_lookup_failed_dataflow}).
+%% CAST
+-spec dataflow_increment_cast_mfa_lookup() -> ok.
+dataflow_increment_cast_mfa_lookup() -> gen_server:cast(?MODULE, {increment, dataflow_cast_mfa_lookup}).
 
+-spec dataflow_increment_cast_generic() -> ok.
+dataflow_increment_cast_generic() -> gen_server:cast(?MODULE, {increment, dataflow_cast_generic}).
+
+%% STATISTICS
 -spec get_statistics() -> any().
 get_statistics() ->
   gen_server:call(?MODULE, get_statistics).
--spec get_new_statistics() -> any().
-
-get_new_statistics() ->
-  gen_server:call(?MODULE, get_new_statistics).
 
 -spec start() -> any().
 start() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -100,19 +72,14 @@ start() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 -spec init(any()) -> any().
 init([]) -> Dictionary = dict:from_list(
   [
-    {call_arity_success, 0}, {call_arity_failed, 0},
-    {call_mfa_success, 0}, {call_mfa_failed, 0},
-    {call_arity_success_dataflow, 0}, {call_arity_failed_dataflow, 0},
-    {call_mfa_success_dataflow, 0}, {call_mfa_failed_dataflow, 0},
-
-    {any_succ, 0}, {any_succ_dataflow, 0},
+    {typesig_call_arity_lookup, 0},
+    {typesig_call_mfa_lookup, 0}, {typesig_cast_mfa_lookup, 0},
+    {typesig_call_generic, 0}, {typesig_cast_generic, 0},
     {known_bug, 0},
-    {any_contract, 0}, {any_contract_dataflow, 0},
-    {call_arity, 0}, {call_arity_dataflow, 0}, {call, 0}, {call_dataflow, 0},
-    {cast, 0}, {cast_dataflow, 0},
-    {call_arity_lookup_failed, 0}, {call_arity_lookup_failed_dataflow, 0},
-    {call_lookup_failed, 0}, {call_lookup_failed_dataflow, 0},
-    {cast_lookup_failed, 0}, {cast_lookup_failed_dataflow, 0}
+
+    {dataflow_call_arity_lookup, 0},
+    {dataflow_call_mfa_lookup, 0}, {dataflow_cast_mfa_lookup, 0},
+    {dataflow_call_generic, 0}, {dataflow_cast_generic, 0}
   ]),
   {ok, Dictionary}.
 
@@ -121,56 +88,42 @@ handle_cast({increment, Who}, Dictionary) ->
   Dict2 = dict:update(Who, fun(Val) -> Val + 1 end, Dictionary),
   {noreply, Dict2}.
 
--spec handle_call(any(), any(), any()) -> any().
-handle_call(get_new_statistics, _From, Dictionary) ->
-  CallAritySuccess = dict:fetch(call_arity_success, Dictionary),
-  CallArityFailed = dict:fetch(call_arity_failed, Dictionary),
-  CallMfaSuccess = dict:fetch(call_mfa_success, Dictionary),
-  CallMfaFailed = dict:fetch(call_mfa_failed, Dictionary),
-
-  CallAritySuccessDataflow = dict:fetch(call_arity_success_dataflow, Dictionary),
-  CallArityFailedDataflow = dict:fetch(call_arity_failed_dataflow, Dictionary),
-  CallMfaSuccessDataflow = dict:fetch(call_mfa_success_dataflow, Dictionary),
-  CallMfaFailedDataflow = dict:fetch(call_mfa_failed_dataflow, Dictionary),
-
-  Res = [
-    {call_arity_success, CallAritySuccess}, {call_arity_failed, CallArityFailed},
-    {call_mfa_success, CallMfaSuccess}, {call_mfa_failed, CallMfaFailed},
-    {call_arity_success_dataflow, CallAritySuccessDataflow}, {call_arity_failed_dataflow, CallArityFailedDataflow},
-    {call_mfa_success_dataflow, CallMfaSuccessDataflow}, {call_mfa_failed_dataflow, CallMfaFailedDataflow}],
-
-  {reply, Res, Dictionary};
-
+-spec handle_call(get_statistics, any(), any()) -> any().
 handle_call(get_statistics, _From, Dictionary) ->
-  AnySucc = dict:fetch(any_succ, Dictionary),
-  AnyContract = dict:fetch(any_contract, Dictionary),
-  KnownBug = dict:fetch(known_bug, Dictionary),
+  Typesig_Call_Arity_Lookup = dict:fetch(typesig_call_arity_lookup, Dictionary),
+  Typesig_Call_Mfa_Lookup = dict:fetch(typesig_call_mfa_lookup, Dictionary),
+  Typesig_Call_Generic = dict:fetch(typesig_call_generic, Dictionary),
 
-  CallArity = dict:fetch(call_arity, Dictionary),
-  Call = dict:fetch(call, Dictionary),
-  Cast = dict:fetch(cast, Dictionary),
-  CallArityLookupFailed = dict:fetch(call_arity_lookup_failed, Dictionary),
-  CallLookupFailed = dict:fetch(call_lookup_failed, Dictionary),
-  CastLookupFailed = dict:fetch(cast_lookup_failed, Dictionary),
+  Typesig_Cast_Mfa_Lookup = dict:fetch(typesig_cast_mfa_lookup, Dictionary),
+  Typesig_Cast_Generic = dict:fetch(typesig_cast_generic, Dictionary),
 
-  AnySuccDf = dict:fetch(any_succ_dataflow, Dictionary),
-  AnyContractDf = dict:fetch(any_contract_dataflow, Dictionary),
-  CallArityDf = dict:fetch(call_arity_dataflow, Dictionary),
-  CallDf = dict:fetch(call_dataflow, Dictionary),
-  CastDf = dict:fetch(cast_dataflow, Dictionary),
-  CallArityLookupFailedDf = dict:fetch(call_arity_lookup_failed_dataflow, Dictionary),
-  CallLookupFailedDf = dict:fetch(call_lookup_failed_dataflow, Dictionary),
-  CastLookupFailedDf = dict:fetch(cast_lookup_failed_dataflow, Dictionary),
+  Known_Bug = dict:fetch(known_bug, Dictionary),
+
+  Dataflow_Call_Arity_Lookup = dict:fetch(dataflow_call_arity_lookup, Dictionary),
+  Dataflow_Call_Mfa_Lookup = dict:fetch(dataflow_call_mfa_lookup, Dictionary),
+  Dataflow_Call_Generic = dict:fetch(dataflow_call_generic, Dictionary),
+
+  Dataflow_Cast_Mfa_Lookup = dict:fetch(dataflow_cast_mfa_lookup, Dictionary),
+  Dataflow_Cast_Generic = dict:fetch(dataflow_cast_generic, Dictionary),
 
   Res = [
-    {any_succ, AnySucc}, {any_contract, AnyContract}, {call_arity, CallArity}, {call, Call},
-    {cast, Cast}, {call_arity_lookup_failed, CallArityLookupFailed},
-    {known_bug, KnownBug},
-    {call_lookup_failed, CallLookupFailed}, {cast_lookup_failed, CastLookupFailed},
+    {typesig_call_arity_lookup, Typesig_Call_Arity_Lookup},
+    {typesig_call_mfa_lookup, Typesig_Call_Mfa_Lookup},
+    {typesig_call_generic, Typesig_Call_Generic},
 
-    {any_succ_dataflow, AnySuccDf}, {any_contract_dataflow, AnyContractDf}, {call_arity_dataflow, CallArityDf}, {call_dataflow, CallDf},
-    {cast_dataflow, CastDf}, {call_arity_lookup_failed_dataflow, CallArityLookupFailedDf},
-    {call_lookup_failed_dataflow, CallLookupFailedDf}, {cast_lookup_failed_dataflow, CastLookupFailedDf}],
+    {typesig_cast_mfa_lookup, Typesig_Cast_Mfa_Lookup},
+    {typesig_cast_generic, Typesig_Cast_Generic},
+
+    {dataflow_call_arity_lookup, Dataflow_Call_Arity_Lookup},
+    {dataflow_call_mfa_lookup, Dataflow_Call_Mfa_Lookup},
+    {dataflow_call_generic, Dataflow_Call_Generic},
+
+    {dataflow_cast_mfa_lookup, Dataflow_Cast_Mfa_Lookup},
+    {dataflow_cast_generic, Dataflow_Cast_Generic},
+
+
+    {known_bug, Known_Bug}
+  ],
 
   {reply, Res, Dictionary}.
 

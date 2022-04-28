@@ -427,12 +427,6 @@ contract_return_type({M, call, _} = MFA, C, #state{callgraph = Callgraph}) when 
                        end;
                      _ -> R
                    end,
-
-      case ReturnType of
-        any -> dialyzer_statistics:increment_counter_any_contract(?MODULE);
-        _ -> ok
-      end,
-
       ReturnType
             end;
     false -> contract_return_type1(MFA, C)
@@ -3552,19 +3546,18 @@ state__fun_info(external, #state{}) ->
 state__fun_info({M, cast, _Arity} = MFA, #state{plt = PLT, module = Module, callgraph = Callgraph} = State) when M =:= 'gen_server'; M =:= 'Elixir.GenServer' ->
   case dialyzer_callgraph:get_gen_server_detection(Callgraph) of
     true ->
+      dialyzer_statistics:dataflow_increment_cast_mfa_lookup(),
       HandleCastMFA = {Module, handle_cast, 2},
       case dialyzer_plt:lookup(PLT, HandleCastMFA) of
         none ->
           % handle_cast lookup failed in Plt
-          dialyzer_statistics:increment_counter_cast_lookup_failed(?MODULE),
+          dialyzer_statistics:dataflow_increment_cast_generic(),
           {MFA,
             dialyzer_plt:lookup(PLT, MFA),
             dialyzer_plt:lookup_contract(PLT, MFA),
             t_any()};
         {value, {_ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
           % handle_cast found in Plt
-          dialyzer_statistics:increment_counter_cast(?MODULE),
-
           % Get the 2 arguments to handle_cast.
           % E.g. if handle_cast looks like handle_cast({my_server_api, Arg}, _State)
           % then we are pulling out {my_server_api, Arg}
@@ -3585,9 +3578,7 @@ state__fun_info({M, cast, _Arity} = MFA, #state{plt = PLT, module = Module, call
 
                             {'value', C#contract{args = NewGenArgs}}
                         end,
-
           % TODO: Check if contract is any here
-
           {MFA,
             {'value', {ReturnTypes, GenServerInput}},
             NewContract,
@@ -3620,6 +3611,7 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module, c
 
       ?log("[DATAFLOW(~p)]: As for data is: ~n~p~n~n", [_UniqueId, As]),
 
+      dialyzer_statistics:dataflow_increment_call_arity_lookup(),
       [_Pid, InputType | _Rest] = As,
       LookupTypeTemp = case InputType of
                          {c, atom, [Atom], _} ->
@@ -3639,12 +3631,11 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module, c
                      none ->
                        % handle_call with arity lookup failed
                        ?log("[DATAFLOW(~p)]: Plt lookup for: ~n~p~n~n", [_UniqueId, HandleCallMFA]),
-                       dialyzer_statistics:increment_counter_call_arity_lookup_failed(?MODULE),
+                       dialyzer_statistics:dataflow_increment_call_mfa_lookup(),
                        dialyzer_plt:lookup(Plt, HandleCallMFA);
                      T ->
                        % handle_call with arity lookup was successful
                        ?log("[DATAFLOW(~p)]: Lookup type found for Plt lookup with arity~n~n", [_UniqueId]),
-                       dialyzer_statistics:increment_counter_call_arity(?MODULE),
                        T
                    end,
 
@@ -3653,15 +3644,12 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module, c
       case LookupType of
         none ->
           ?log("[DATAFLOW(~p)]: Fallback to Dialyzer lookup: any()~n~n", [_UniqueId]),
-
-          dialyzer_statistics:increment_counter_call_lookup_failed(?MODULE),
+          dialyzer_statistics:dataflow_increment_call_generic(),
           {MFA,
             dialyzer_plt:lookup(Plt, MFA),
             dialyzer_plt:lookup_contract(Plt, MFA),
             t_any()};
         {value, {ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
-          dialyzer_statistics:increment_counter_call(?MODULE),
-
           % Get the 3 arguments to handle_call.
           % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
           % then we are pulling out {my_server_api, Arg}
@@ -3681,13 +3669,6 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module, c
                             end;
                           _ -> any
                         end,
-
-          % Get statistics on any reached in success typing
-          case ReturnTypes of
-            any -> dialyzer_statistics:increment_counter_any_succ(?MODULE);
-            _ -> ok
-          end,
-
           ?log("[DATAFLOW(~p)]: Result of success: ~n--InputTypes: ~p~n--ReturnTypes: ~p~n~n", [_UniqueId, InputTypes, ReturnTypes]),
 
           GenServerInput =

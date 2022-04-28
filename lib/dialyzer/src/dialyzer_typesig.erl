@@ -979,19 +979,21 @@ get_plt_constr_gen_server_handle_cast(InputMFA, Dst, ArgVars, State) ->
   SCCMFAs = State#state.mfas,
   Module = State#state.module,
   HandleCastMFA = {Module, handle_cast, 2},
+
+  %% INCREMENT CAST_MFA
+  dialyzer_statistics:typesig_increment_cast_mfa_lookup(),
+
   case dialyzer_plt:lookup(Plt, HandleCastMFA) of
     none ->
-      % Get statistics on lookup not found
-      dialyzer_statistics:increment_counter_cast_lookup_failed(?MODULE),
-
       % gen_server:cast is being used in more scenarios than just our discrepancies.
       % We therefore have to make sure that when nothing is found in the PLT, we do what Dialyzer normally does.
+
+      %% INCREMENT CAST_GENERIC
+      dialyzer_statistics:typesig_increment_cast_generic(),
+
       PltRes = dialyzer_plt:lookup(Plt, InputMFA),
       get_plt_constr_contract(InputMFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs);
     {value, {_ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
-      % Increment handle_cast counter
-      dialyzer_statistics:increment_counter_cast(?MODULE),
-
       [InputTypes, _] = InputTypesWrapper,
       ReturnTypes = {c,atom,[ok],unknown},
       GenServerInput = [any, InputTypes],
@@ -1038,6 +1040,8 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
 
   ?log("[TYPESIG(~p)]: ArgVars is ~n~p~n~n", [_UniqueId, ArgVars]),
 
+  %% INCREMENT CALL
+  dialyzer_statistics:typesig_increment_call_arity_lookup(),
   [_Pid, InputType | _Rest] = ArgVars,
   LookupTypeTemp = case InputType of
            {c, atom, [Atom], _} ->
@@ -1057,18 +1061,21 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
     none ->
       % TODO: Consider case where the InputType above did not match
       ?log("[TYPESIG(~p)]: Found none. Looking up default handle_call: ~n~p~n~n", [_UniqueId, HandleCallMFA]),
-      % Increment handle_call with arity lookup failed
-      dialyzer_statistics:increment_counter_call_arity_lookup_failed(?MODULE),
+      %% INCREMENT CALL_MFA
+      dialyzer_statistics:typesig_increment_call_mfa_lookup(),
+
       dialyzer_plt:lookup(Plt, HandleCallMFA);
     {value, {none, _}} ->
       ?log("[TYPESIG(~p)]: The known bug with none was encountered!~n~n", [_UniqueId]),
       ?log("[TYPESIG(~p)]: Plt lookup for: ~n~p~n~n", [_UniqueId, HandleCallMFA]),
-      dialyzer_statistics:increment_known_none_bug(?MODULE),
+      %% INCREMENT CALL_MFA + INCREMENT KNOWN_NONE_BUG
+      dialyzer_statistics:typesig_increment_call_mfa_lookup(),
+      dialyzer_statistics:increment_known_bug(),
+
       dialyzer_plt:lookup(Plt, HandleCallMFA);
     T ->
       % handle_call with arity found in Plt
       ?log("[TYPESIG(~p)]: Lookup type found for Plt lookup with arity~n~n", [_UniqueId]),
-      dialyzer_statistics:increment_counter_call_arity(?MODULE),
       T
   end,
 
@@ -1078,18 +1085,14 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
     none ->
       % gen_server:call is being used in more scenarios than just our discrepancies.
       % We therefore have to make sure that when nothing is found in the PLT, we do what Dialyzer normally does.
-
       ?log("[TYPESIG(~p)]: Final result failed. Fallback to Dialyzer lookup: any()~n~n", [_UniqueId]),
 
-      % Increment handle_call lookup failed counter
-      dialyzer_statistics:increment_counter_call_lookup_failed(?MODULE),
+      %% INCREMENT CALL_GENERIC
+      dialyzer_statistics:typesig_increment_call_generic(),
 
       PltRes = dialyzer_plt:lookup(Plt, InputMFA),
       get_plt_constr_contract(InputMFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs);
     {value, {ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
-      % Increment handle_call  counter
-      dialyzer_statistics:increment_counter_call(?MODULE),
-
       % Get the 3 arguments to handle_call.
       % E.g. if handle_call looks like handle_call({my_server_api, Arg}, _From, _State)
       % then we are pulling out {my_server_api, Arg}
@@ -1109,12 +1112,6 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
                         end;
                       _ -> any
                     end,
-
-      % Get statistics on any reached in success typing
-      case ReturnTypes of
-        any -> dialyzer_statistics:increment_counter_any_succ(?MODULE);
-        _ -> ok
-      end,
 
       ?log("[TYPESIG(~p)]: Result of success: ~n--InputTypes: ~p~n--ReturnTypes: ~p~n~n", [_UniqueId, InputTypes, ReturnTypes]),
 
@@ -1172,13 +1169,6 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
                     tuple_set -> get_tuple_set_return_type(ContractReturnType);
                     _ -> any
                   end,
-
-                % Get statistics on any reached in contract
-                case CRet of
-                  any -> dialyzer_statistics:increment_counter_any_contract(?MODULE);
-                  _ -> ok
-                end,
-
                 t_inf(CRet, ReturnTypes)
               end, ArgVars
             ),
