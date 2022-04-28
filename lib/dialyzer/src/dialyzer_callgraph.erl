@@ -711,7 +711,6 @@ get_gen_server_detection(#callgraph{gen_server_detection = GSD}) ->
 -spec get_gen_server_debugging(callgraph()) -> boolean().
 
 get_gen_server_debugging(#callgraph{gen_server_debugging = GSD}) ->
-  io:format("Her: ~p~n", [GSD]),
   GSD.
 
 -spec get_behaviour_api_calls(callgraph()) -> [{mfa(), mfa()}].
