@@ -3613,9 +3613,11 @@ state__fun_info(Fun, #state{callgraph = CG, fun_tab = FunTab, plt = PLT}) ->
   {Fun, Sig, Contract, LocalRet}.
 
 state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module, callgraph = Callgraph} = State) when M =:= 'gen_server'; M =:= 'Elixir.GenServer' ->
-  UniqueId = erlang:phash2({node(), now()}),
   case dialyzer_callgraph:get_gen_server_detection(Callgraph) of
     true -> HandleCallMFA = {Module, handle_call, 3},
+      UniqueId = erlang:phash2({node(), now()}),
+
+      ?log("[DATAFLOW(~p)]: As for data is: ~n~p~n~n", [UniqueId, As]),
 
       [_Pid, InputType | _Rest] = As,
       LookupTypeTemp = case InputType of
