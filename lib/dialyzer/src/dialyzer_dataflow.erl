@@ -68,15 +68,18 @@
      ]).
 
 % Add gen_server logging
--define(GEN_SERVER_LOGGING, true).
-
--ifdef(GEN_SERVER_LOGGING).
--define(log(__String, __Args), io:format(__String, __Args)).
--define(log(__String), io:format(__String)).
--else.
--define(log(__String, __Args), ok).
--define(log(__String), ok).
--endif.
+-define(log(__String, __Args, __State),
+  Callgraph = __State#state.callgraph,
+  case dialyzer_callgraph:get_gen_server_debugging(Callgraph) of
+    true -> io:format(__String, __Args);
+    false -> ok
+  end).
+-define(log(__String, __State),
+  Callgraph = __State#state.callgraph,
+  case dialyzer_callgraph:get_gen_server_debugging(Callgraph) of
+    true -> io:format(__String);
+    false -> ok
+  end).
 
 %%-define(DEBUG, true).
 %%-define(DEBUG_PP, true).
@@ -3609,41 +3612,41 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module, c
       HandleCallMFA = {Module, handle_call, 3},
       _UniqueId = erlang:phash2({erlang:monotonic_time(), erlang:unique_integer()}),
 
-      ?log("[DATAFLOW(~p)]: As for data is: ~n~p~n~n", [_UniqueId, As]),
+      ?log("[DATAFLOW(~p)]: As for data is: ~n~p~n~n", [_UniqueId, As], State),
 
       dialyzer_statistics:dataflow_increment_call_arity_lookup(),
       [_Pid, InputType | _Rest] = As,
       LookupTypeTemp = case InputType of
                          {c, atom, [Atom], _} ->
-                           ?log("[DATAFLOW(~p)]: Plt lookup with arity for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, 1}]),
+                           ?log("[DATAFLOW(~p)]: Plt lookup with arity for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, 1}], State),
                            dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, 1});
                          {c, tuple, [{c, atom, [Atom], _} | _] = InputList, _} ->
-                           ?log("[DATAFLOW(~p)]: Plt lookup with arity for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, length(InputList)}]),
+                           ?log("[DATAFLOW(~p)]: Plt lookup with arity for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, length(InputList)}], State),
                            dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
                          _ ->
-                           ?log("[DATAFLOW(~p)]: No matching input-type for: ~n~p~n~n", [_UniqueId, InputType]),
+                           ?log("[DATAFLOW(~p)]: No matching input-type for: ~n~p~n~n", [_UniqueId, InputType], State),
                            none
                        end,
 
-      ?log("[DATAFLOW(~p)]: Result of Plt lookup with arity: ~n~p~n~n", [_UniqueId, LookupTypeTemp]),
+      ?log("[DATAFLOW(~p)]: Result of Plt lookup with arity: ~n~p~n~n", [_UniqueId, LookupTypeTemp], State),
 
       LookupType = case LookupTypeTemp of
                      none ->
                        % handle_call with arity lookup failed
-                       ?log("[DATAFLOW(~p)]: Plt lookup for: ~n~p~n~n", [_UniqueId, HandleCallMFA]),
+                       ?log("[DATAFLOW(~p)]: Plt lookup for: ~n~p~n~n", [_UniqueId, HandleCallMFA], State),
                        dialyzer_statistics:dataflow_increment_call_mfa_lookup(),
                        dialyzer_plt:lookup(Plt, HandleCallMFA);
                      T ->
                        % handle_call with arity lookup was successful
-                       ?log("[DATAFLOW(~p)]: Lookup type found for Plt lookup with arity~n~n", [_UniqueId]),
+                       ?log("[DATAFLOW(~p)]: Lookup type found for Plt lookup with arity~n~n", [_UniqueId], State),
                        T
                    end,
 
-      ?log("[DATAFLOW(~p)]: Final result of Plt lookup: ~n~p~n~n", [_UniqueId, LookupType]),
+      ?log("[DATAFLOW(~p)]: Final result of Plt lookup: ~n~p~n~n", [_UniqueId, LookupType], State),
 
       case LookupType of
         none ->
-          ?log("[DATAFLOW(~p)]: Fallback to Dialyzer lookup: any()~n~n", [_UniqueId]),
+          ?log("[DATAFLOW(~p)]: Fallback to Dialyzer lookup: any()~n~n", [_UniqueId], State),
           dialyzer_statistics:dataflow_increment_call_generic(),
           {MFA,
             dialyzer_plt:lookup(Plt, MFA),
@@ -3669,7 +3672,7 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module, c
                             end;
                           _ -> any
                         end,
-          ?log("[DATAFLOW(~p)]: Result of success: ~n--InputTypes: ~p~n--ReturnTypes: ~p~n~n", [_UniqueId, InputTypes, ReturnTypes]),
+          ?log("[DATAFLOW(~p)]: Result of success: ~n--InputTypes: ~p~n--ReturnTypes: ~p~n~n", [_UniqueId, InputTypes, ReturnTypes], State),
 
           GenServerInput =
             case Arity of

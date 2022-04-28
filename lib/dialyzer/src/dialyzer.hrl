@@ -56,6 +56,7 @@
 -define(WARN_UNKNOWN, warn_unknown).
 -define(WARN_MAP_CONSTRUCTION, warn_map_construction).
 -define(WARN_GEN_SERVER, warn_gen_server).
+-define(WARN_GEN_SERVER_DEBUG, warn_gen_server_debug).
 
 %%
 %% The following type has double role:
@@ -73,8 +74,7 @@
                        | ?WARN_RACE_CONDITION | ?WARN_RETURN_NO_RETURN
                        | ?WARN_RETURN_ONLY_EXIT | ?WARN_UNDEFINED_CALLBACK
                        | ?WARN_UNKNOWN | ?WARN_UNMATCHED_RETURN
-                        | ?WARN_GEN_SERVER.
-
+                       | ?WARN_GEN_SERVER | ?WARN_GEN_SERVER_DEBUG.
 %%
 %% This is the representation of each warning as they will be returned
 %% to dialyzer's callers

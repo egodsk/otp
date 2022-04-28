@@ -147,11 +147,7 @@ analysis_start(Parent, Analysis, LegalWarnings) ->
   NonExportsList = sets:to_list(NonExports),
 
   % Add gen_server warnings flag
-  NewCallgraph0 =
-    case ordsets:is_element(?WARN_GEN_SERVER, LegalWarnings) of
-      true -> dialyzer_callgraph:put_gen_server_detection(true, Callgraph);
-      false -> Callgraph
-    end,
+  NewCallgraph0 = handle_gen_server_detection(Callgraph, LegalWarnings),
 
   NewCallgraph =
     case Analysis#analysis.race_detection of
@@ -170,6 +166,19 @@ analysis_start(Parent, Analysis, LegalWarnings) ->
   dialyzer_plt:delete(DummyPlt),
   Plt4 = dialyzer_plt:delete_list(Plt3, NonExportsList),
   send_analysis_done(Parent, Plt4, DocPlt).
+
+handle_gen_server_detection(Callgraph, LegalWarnings) ->
+  NewCallgraph = case ordsets:is_element(?WARN_GEN_SERVER, LegalWarnings) of
+                   true -> dialyzer_callgraph:put_gen_server_detection(true, Callgraph);
+                   false -> Callgraph
+                 end,
+
+  NewCallgraph0 = case ordsets:is_element(?WARN_GEN_SERVER_DEBUG, LegalWarnings) of
+    true -> dialyzer_callgraph:put_gen_server_debugging(true, NewCallgraph);
+    false -> NewCallgraph
+  end,
+
+  NewCallgraph0.
 
 remote_type_postprocessing(TmpCServer, Args) ->
   Fun = fun() ->

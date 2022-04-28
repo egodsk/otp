@@ -53,8 +53,8 @@
 	 to_ps/3]).
 
 -export([cleanup/1, get_digraph/1, get_named_tables/1, get_public_tables/1,
-         get_race_code/1, get_race_detection/1, get_gen_server_detection/1, race_code_new/1,
-         put_digraph/2, put_race_code/2, put_race_detection/2, put_gen_server_detection/2,
+         get_race_code/1, get_race_detection/1, get_gen_server_detection/1, get_gen_server_debugging/1, race_code_new/1,
+         put_digraph/2, put_race_code/2, put_race_detection/2, put_gen_server_detection/2, put_gen_server_debugging/2,
          put_named_tables/2, put_public_tables/2, put_behaviour_api_calls/2,
 	 get_behaviour_api_calls/1, dispose_race_server/1, duplicate/1]).
 
@@ -107,7 +107,8 @@
                                                     | 'undefined', % race
                     race_detection = false         :: boolean(),
 		    race_data_server = dialyzer_race_data_server:new() :: pid(),
-            gen_server_detection = false   :: boolean()}).
+            gen_server_detection = false   :: boolean(),
+            gen_server_debugging = false   :: boolean()}).
 
 
 %% Exported Types
@@ -707,6 +708,11 @@ get_race_detection(#callgraph{race_detection = RD}) ->
 get_gen_server_detection(#callgraph{gen_server_detection = GSD}) ->
   GSD.
 
+-spec get_gen_server_debugging(callgraph()) -> boolean().
+
+get_gen_server_debugging(#callgraph{gen_server_debugging = GSD}) ->
+  GSD.
+
 -spec get_behaviour_api_calls(callgraph()) -> [{mfa(), mfa()}].
 
 get_behaviour_api_calls(#callgraph{race_data_server = RaceDataServer}) ->
@@ -737,6 +743,9 @@ put_race_detection(RaceDetection, Callgraph) ->
 -spec put_gen_server_detection(boolean(), callgraph()) -> callgraph().
 put_gen_server_detection(GenServerDetection, Callgraph) ->
   Callgraph#callgraph{gen_server_detection = GenServerDetection}.
+-spec put_gen_server_debugging(boolean(), callgraph()) -> callgraph().
+put_gen_server_debugging(GenServerDebugging, Callgraph) ->
+  Callgraph#callgraph{gen_server_debugging = GenServerDebugging}.
 
 -spec put_named_tables([string()], callgraph()) -> callgraph().
 
