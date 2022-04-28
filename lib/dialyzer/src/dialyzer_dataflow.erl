@@ -68,15 +68,18 @@
      ]).
 
 % Add gen_server logging
-%-define(GEN_SERVER_LOGGING, true).
-
--ifdef(GEN_SERVER_LOGGING).
--define(log(__String, __Args), io:format(__String, __Args)).
--define(log(__String), io:format(__String)).
--else.
--define(log(__String, __Args), ok).
--define(log(__String), ok).
--endif.
+-define(log(__String, __Args, __State),
+  Callgraph = __State#state.callgraph,
+  case dialyzer_callgraph:get_gen_server_debugging(Callgraph) of
+    true -> io:format(__String, __Args);
+    false -> ok
+  end).
+-define(log(__String, __State),
+  Callgraph = __State#state.callgraph,
+  case dialyzer_callgraph:get_gen_server_debugging(Callgraph) of
+    true -> io:format(__String);
+    false -> ok
+  end).
 
 %%-define(DEBUG, true).
 %%-define(DEBUG_PP, true).
@@ -3619,36 +3622,36 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module, c
       [_Pid, InputType | _Rest] = As,
       LookupTypeTemp = case InputType of
                          {c, atom, [Atom], _} ->
-                           ?log("[DATAFLOW]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, 1}]),
+                           ?log("[DATAFLOW]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, 1}], State),
                            dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, 1});
                          {c, tuple, [{c, atom, [Atom], _} | _] = InputList, _} ->
-                           ?log("[DATAFLOW]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, length(InputList)}]),
+                           ?log("[DATAFLOW]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, length(InputList)}], State),
                            dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
                          _ ->
-                           ?log("[DATAFLOW]: No matching input-type for: ~n~p~n~n", [InputType]),
+                           ?log("[DATAFLOW]: No matching input-type for: ~n~p~n~n", [InputType], State),
                            none
                        end,
 
-      ?log("[DATAFLOW]: Result of Plt lookup with arity: ~n~p~n~n", [LookupTypeTemp]),
+      ?log("[DATAFLOW]: Result of Plt lookup with arity: ~n~p~n~n", [LookupTypeTemp], State),
 
       LookupType = case LookupTypeTemp of
                      none ->
                        % handle_call with arity lookup failed
-                       ?log("[DATAFLOW]: Plt lookup for: ~n~p~n~n", [HandleCallMFA]),
+                       ?log("[DATAFLOW]: Plt lookup for: ~n~p~n~n", [HandleCallMFA], State),
                        dialyzer_statistics:increment_counter_call_arity_lookup_failed(?MODULE),
                        dialyzer_plt:lookup(Plt, HandleCallMFA);
                      T ->
                        % handle_call with arity lookup was successful
-                       ?log("[DATAFLOW]: Lookup type found for Plt lookup with arity~n~n"),
+                       ?log("[DATAFLOW]: Lookup type found for Plt lookup with arity~n~n", State),
                        dialyzer_statistics:increment_counter_call_arity(?MODULE),
                        T
                    end,
 
-      ?log("[DATAFLOW]: Final result of Plt lookup: ~n~p~n~n", [LookupType]),
+      ?log("[DATAFLOW]: Final result of Plt lookup: ~n~p~n~n", [LookupType], State),
 
       case LookupType of
         none ->
-          ?log("[DATAFLOW]: Fallback to Dialyzer lookup: any()~n~n"),
+          ?log("[DATAFLOW]: Fallback to Dialyzer lookup: any()~n~n", State),
 
           dialyzer_statistics:increment_counter_call_lookup_failed(?MODULE),
           {MFA,
@@ -3684,8 +3687,8 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module, c
             _ -> ok
           end,
 
-          ?log("[DATAFLOW]: Result of success typing for input types: ~n~p~n~n", [InputTypes]),
-          ?log("[DATAFLOW]: Result of success typing for return types: ~n~p~n~n", [ReturnTypes]),
+          ?log("[DATAFLOW]: Result of success typing for input types: ~n~p~n~n", [InputTypes], State),
+          ?log("[DATAFLOW]: Result of success typing for return types: ~n~p~n~n", [ReturnTypes], State),
 
           GenServerInput =
             case Arity of
