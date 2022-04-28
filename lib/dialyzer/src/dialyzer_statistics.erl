@@ -23,42 +23,42 @@
 %% TYPESIG
 %% CALL
 -spec typesig_increment_call_arity_lookup() -> ok.
-typesig_increment_call_arity_lookup() -> gen_server:cast(?MODULE, {typesig_increment, call_arity_lookup}).
+typesig_increment_call_arity_lookup() -> gen_server:cast(?MODULE, {increment, typesig_call_arity_lookup}).
 
 -spec typesig_increment_call_mfa_lookup() -> ok.
-typesig_increment_call_mfa_lookup() -> gen_server:cast(?MODULE, {typesig_increment, call_mfa_lookup}).
+typesig_increment_call_mfa_lookup() -> gen_server:cast(?MODULE, {increment, typesig_call_mfa_lookup}).
 
 -spec typesig_increment_call_generic() -> ok.
-typesig_increment_call_generic() -> gen_server:cast(?MODULE, {typesig_increment, call_generic}).
+typesig_increment_call_generic() -> gen_server:cast(?MODULE, {increment, typesig_call_generic}).
 
 %% CAST
 -spec typesig_increment_cast_mfa_lookup() -> ok.
-typesig_increment_cast_mfa_lookup() -> gen_server:cast(?MODULE, {typesig_increment, cast_mfa_lookup}).
+typesig_increment_cast_mfa_lookup() -> gen_server:cast(?MODULE, {increment, typesig_cast_mfa_lookup}).
 
 -spec typesig_increment_cast_generic() -> ok.
-typesig_increment_cast_generic() -> gen_server:cast(?MODULE, {typesig_increment, cast_generic}).
+typesig_increment_cast_generic() -> gen_server:cast(?MODULE, {increment, typesig_cast_generic}).
 
 %% BUG
 -spec typesig_increment_known_bug() -> ok.
-typesig_increment_known_bug() -> gen_server:cast(?MODULE, {typesig_increment, known_bug}).
+typesig_increment_known_bug() -> gen_server:cast(?MODULE, {increment, known_bug}).
 
 %% DATAFLOW
 %% CALL
 -spec dataflow_increment_call_arity_lookup() -> ok.
-dataflow_increment_call_arity_lookup() -> gen_server:cast(?MODULE, {dataflow_increment, call_arity_lookup}).
+dataflow_increment_call_arity_lookup() -> gen_server:cast(?MODULE, {increment, dataflow_call_arity_lookup}).
 
 -spec dataflow_increment_call_mfa_lookup() -> ok.
-dataflow_increment_call_mfa_lookup() -> gen_server:cast(?MODULE, {dataflow_increment, call_mfa_lookup}).
+dataflow_increment_call_mfa_lookup() -> gen_server:cast(?MODULE, {increment, dataflow_call_mfa_lookup}).
 
 -spec dataflow_increment_call_generic() -> ok.
-dataflow_increment_call_generic() -> gen_server:cast(?MODULE, {dataflow_increment, call_generic}).
+dataflow_increment_call_generic() -> gen_server:cast(?MODULE, {increment, dataflow_call_generic}).
 
 %% CAST
 -spec dataflow_increment_cast_mfa_lookup() -> ok.
-dataflow_increment_cast_mfa_lookup() -> gen_server:cast(?MODULE, {dataflow_increment, cast_mfa_lookup}).
+dataflow_increment_cast_mfa_lookup() -> gen_server:cast(?MODULE, {increment, dataflow_cast_mfa_lookup}).
 
 -spec dataflow_increment_cast_generic() -> ok.
-dataflow_increment_cast_generic() -> gen_server:cast(?MODULE, {dataflow_increment, cast_generic}).
+dataflow_increment_cast_generic() -> gen_server:cast(?MODULE, {increment, dataflow_cast_generic}).
 
 %% STATISTICS
 -spec get_statistics() -> any().

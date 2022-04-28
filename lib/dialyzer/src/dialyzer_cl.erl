@@ -404,7 +404,6 @@ do_analysis(Files, Options, Plt, PltInfo) ->
   % Display statistics if enabled
   case ordsets:is_element(?WARN_GEN_SERVER, Options#options.legal_warnings) of
     true ->
-      io:format("New statistics for gen_server: ~n~p~n", [dialyzer_statistics:get_new_statistics()]),
       io:format("Statistics for gen_server: ~n~p~n", [dialyzer_statistics:get_statistics()]);
     false -> ok
   end,
