@@ -1017,56 +1017,58 @@ get_plt_constr_gen_server_handle_cast(InputMFA, Dst, ArgVars, State) ->
   end.
 
 get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, State) ->
-  % TODO: How do we handle that Elixir has a different MFA for calling gen_server?
   Plt = state__plt(State),
   SCCMFAs = State#state.mfas,
   Module = State#state.module,
   HandleCallMFA = {Module, handle_call, 3},
 
-  ?log("[TYPESIG]: ArgVars is ~n~p~n~n", [ArgVars]),
+  % Create umique id used for joining logs together
+  UniqueId = erlang:phash2({node(), now()}),
+
+  ?log("[TYPESIG(~p)]:  ArgVars is ~n~p~n~n", [UniqueId, ArgVars]),
 
   [_Pid, InputType | _Rest] = ArgVars,
   LookupTypeTemp = case InputType of
            {c, atom, [Atom], _} ->
-             ?log("[TYPESIG]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, 1}]),
+             ?log("[TYPESIG(~p)]: Plt lookup with arity for: ~n~p~n~n", [UniqueId, {Module, handle_call, 3, Atom, 1}]),
              dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, 1});
            {c, tuple, [{c, atom, [Atom], _} | _] = InputList, _} ->
-             ?log("[TYPESIG]: Plt lookup with arity for: ~n~p~n~n", [{Module, handle_call, 3, Atom, length(InputList)}]),
+             ?log("[TYPESIG(~p)]: Plt lookup with arity for: ~n~p~n~n", [UniqueId, {Module, handle_call, 3, Atom, length(InputList)}]),
              dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
            _ ->
-             ?log("[TYPESIG]: Plt lookup unknown type: ~n~p~n~n", [InputType]),
+             ?log("[TYPESIG(~p)]: Plt lookup unknown type: ~n~p~n~n", [UniqueId, InputType]),
              none
          end,
 
-  ?log("[TYPESIG]: Result of Plt lookup with arity: ~n~p~n~n", [LookupTypeTemp]),
+  ?log("[TYPESIG(~p)]: Result of Plt lookup with arity: ~n~p~n~n", [UniqueId, LookupTypeTemp]),
 
   LookupType = case LookupTypeTemp of
     none ->
       % TODO: Consider case where the InputType above did not match
-      ?log("[TYPESIG]: Plt lookup for: ~n~p~n~n", [HandleCallMFA]),
+      ?log("[TYPESIG(~p)]: Plt lookup for: ~n~p~n~n", [UniqueId, HandleCallMFA]),
       % Increment handle_call with arity lookup failed
       dialyzer_statistics:increment_counter_call_arity_lookup_failed(?MODULE),
       dialyzer_plt:lookup(Plt, HandleCallMFA);
     {value, {none, _}} ->
-      ?log("[TYPESIG]: The known bug with none was encountered!~n~n"),
-      ?log("[TYPESIG]: Plt lookup for: ~n~p~n~n", [HandleCallMFA]),
+      ?log("[TYPESIG(~p)]: The known bug with none was encountered!~n~n", [UniqueId]),
+      ?log("[TYPESIG(~p)]: Plt lookup for: ~n~p~n~n", [UniqueId, HandleCallMFA]),
       dialyzer_statistics:increment_known_none_bug(?MODULE),
       dialyzer_plt:lookup(Plt, HandleCallMFA);
     T ->
       % handle_call with arity found in Plt
-      ?log("[TYPESIG]: Lookup type found for Plt lookup with arity~n~n"),
+      ?log("[TYPESIG(~p)]: Lookup type found for Plt lookup with arity~n~n", [UniqueId]),
       dialyzer_statistics:increment_counter_call_arity(?MODULE),
       T
   end,
 
-  ?log("[TYPESIG]: Final result of Plt lookup: ~n~p~n~n", [LookupType]),
+  ?log("[TYPESIG(~p)]: Final result of Plt lookup: ~n~p~n~n", [UniqueId, LookupType]),
 
   case LookupType of
     none ->
       % gen_server:call is being used in more scenarios than just our discrepancies.
       % We therefore have to make sure that when nothing is found in the PLT, we do what Dialyzer normally does.
 
-      ?log("[TYPESIG]: Fallback to Dialyzer lookup: any()~n~n"),
+      ?log("[TYPESIG(~p)]: Fallback to Dialyzer lookup: any()~n~n", [UniqueId]),
 
       % Increment handle_call lookup failed counter
       dialyzer_statistics:increment_counter_call_lookup_failed(?MODULE),
@@ -1103,8 +1105,8 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
         _ -> ok
       end,
 
-      ?log("[TYPESIG]: Result of success typing for input types: ~n~p~n~n", [InputTypes]),
-      ?log("[TYPESIG]: Result of success typing for return types: ~n~p~n~n", [ReturnTypes]),
+      ?log("[TYPESIG(~p)]: Result of success typing for input types: ~n~p~n~n", [UniqueId, InputTypes]),
+      ?log("[TYPESIG(~p)]: Result of success typing for return types: ~n~p~n~n", [UniqueId, ReturnTypes]),
 
       GenServerInput =
         case Arity of
