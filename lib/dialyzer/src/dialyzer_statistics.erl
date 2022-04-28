@@ -11,32 +11,54 @@
 -export([
   start/0,
   get_statistics/0,
-  increment_call_arity_lookup/0, increment_call_mfa_lookup/0, increment_call_generic/0,
-  increment_cast_mfa_lookup/0, increment_cast_generic/0,
-  increment_known_bug/0
+  typesig_increment_call_arity_lookup/0, typesig_increment_call_mfa_lookup/0, typesig_increment_call_generic/0,
+  typesig_increment_cast_mfa_lookup/0, typesig_increment_cast_generic/0,
+  typesig_increment_known_bug/0,
+  dataflow_increment_call_arity_lookup/0, dataflow_increment_call_mfa_lookup/0, dataflow_increment_call_generic/0,
+  dataflow_increment_cast_mfa_lookup/0, dataflow_increment_cast_generic/0
 ]).
 
 % Client APIs
+
+%% TYPESIG
 %% CALL
--spec increment_call_arity_lookup() -> ok.
-increment_call_arity_lookup() -> gen_server:cast(?MODULE, {increment, call_arity_lookup}).
+-spec typesig_increment_call_arity_lookup() -> ok.
+typesig_increment_call_arity_lookup() -> gen_server:cast(?MODULE, {typesig_increment, call_arity_lookup}).
 
--spec increment_call_mfa_lookup() -> ok.
-increment_call_mfa_lookup() -> gen_server:cast(?MODULE, {increment, call_mfa_lookup}).
+-spec typesig_increment_call_mfa_lookup() -> ok.
+typesig_increment_call_mfa_lookup() -> gen_server:cast(?MODULE, {typesig_increment, call_mfa_lookup}).
 
--spec increment_call_generic() -> ok.
-increment_call_generic() -> gen_server:cast(?MODULE, {increment, call_generic}).
+-spec typesig_increment_call_generic() -> ok.
+typesig_increment_call_generic() -> gen_server:cast(?MODULE, {typesig_increment, call_generic}).
 
 %% CAST
--spec increment_cast_mfa_lookup() -> ok.
-increment_cast_mfa_lookup() -> gen_server:cast(?MODULE, {increment, cast_mfa_lookup}).
+-spec typesig_increment_cast_mfa_lookup() -> ok.
+typesig_increment_cast_mfa_lookup() -> gen_server:cast(?MODULE, {typesig_increment, cast_mfa_lookup}).
 
--spec increment_cast_generic() -> ok.
-increment_cast_generic() -> gen_server:cast(?MODULE, {increment, cast_generic}).
+-spec typesig_increment_cast_generic() -> ok.
+typesig_increment_cast_generic() -> gen_server:cast(?MODULE, {typesig_increment, cast_generic}).
 
 %% BUG
--spec increment_known_bug() -> ok.
-increment_known_bug() -> gen_server:cast(?MODULE, {increment, known_bug}).
+-spec typesig_increment_known_bug() -> ok.
+typesig_increment_known_bug() -> gen_server:cast(?MODULE, {typesig_increment, known_bug}).
+
+%% DATAFLOW
+%% CALL
+-spec dataflow_increment_call_arity_lookup() -> ok.
+dataflow_increment_call_arity_lookup() -> gen_server:cast(?MODULE, {dataflow_increment, call_arity_lookup}).
+
+-spec dataflow_increment_call_mfa_lookup() -> ok.
+dataflow_increment_call_mfa_lookup() -> gen_server:cast(?MODULE, {dataflow_increment, call_mfa_lookup}).
+
+-spec dataflow_increment_call_generic() -> ok.
+dataflow_increment_call_generic() -> gen_server:cast(?MODULE, {dataflow_increment, call_generic}).
+
+%% CAST
+-spec dataflow_increment_cast_mfa_lookup() -> ok.
+dataflow_increment_cast_mfa_lookup() -> gen_server:cast(?MODULE, {dataflow_increment, cast_mfa_lookup}).
+
+-spec dataflow_increment_cast_generic() -> ok.
+dataflow_increment_cast_generic() -> gen_server:cast(?MODULE, {dataflow_increment, cast_generic}).
 
 %% STATISTICS
 -spec get_statistics() -> any().
@@ -50,11 +72,14 @@ start() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 -spec init(any()) -> any().
 init([]) -> Dictionary = dict:from_list(
   [
-    {call_arity_lookup, 0},
-    {call_mfa_lookup, 0}, {cast_mfa_lookup, 0},
-    {call_generic, 0}, {cast_generic, 0},
+    {typesig_call_arity_lookup, 0},
+    {typesig_call_mfa_lookup, 0}, {typesig_cast_mfa_lookup, 0},
+    {typesig_call_generic, 0}, {typesig_cast_generic, 0},
+    {known_bug, 0},
 
-    {known_bug, 0}
+    {dataflow_call_arity_lookup, 0},
+    {dataflow_call_mfa_lookup, 0}, {dataflow_cast_mfa_lookup, 0},
+    {dataflow_call_generic, 0}, {dataflow_cast_generic, 0}
   ]),
   {ok, Dictionary}.
 
@@ -65,22 +90,37 @@ handle_cast({increment, Who}, Dictionary) ->
 
 -spec handle_call(get_statistics, any(), any()) -> any().
 handle_call(get_statistics, _From, Dictionary) ->
-  Call_Arity_Lookup = dict:fetch(call_arity_lookup, Dictionary),
-  Call_Mfa_Lookup = dict:fetch(call_mfa_lookup, Dictionary),
-  Call_Generic = dict:fetch(call_generic, Dictionary),
+  Typesig_Call_Arity_Lookup = dict:fetch(typesig_call_arity_lookup, Dictionary),
+  Typesig_Call_Mfa_Lookup = dict:fetch(typesig_call_mfa_lookup, Dictionary),
+  Typesig_Call_Generic = dict:fetch(typesig_call_generic, Dictionary),
 
-  Cast_Mfa_Lookup = dict:fetch(cast_mfa_lookup, Dictionary),
-  Cast_Generic = dict:fetch(cast_generic, Dictionary),
+  Typesig_Cast_Mfa_Lookup = dict:fetch(typesig_cast_mfa_lookup, Dictionary),
+  Typesig_Cast_Generic = dict:fetch(typesig_cast_generic, Dictionary),
 
   Known_Bug = dict:fetch(known_bug, Dictionary),
 
-  Res = [
-    {call_arity_lookup, Call_Arity_Lookup},
-    {call_mfa_lookup, Call_Mfa_Lookup},
-    {call_generic, Call_Generic},
+  Dataflow_Call_Arity_Lookup = dict:fetch(dataflow_call_arity_lookup, Dictionary),
+  Dataflow_Call_Mfa_Lookup = dict:fetch(dataflow_call_mfa_lookup, Dictionary),
+  Dataflow_Call_Generic = dict:fetch(dataflow_call_generic, Dictionary),
 
-    {cast_mfa_lookup, Cast_Mfa_Lookup},
-    {cast_generic, Cast_Generic},
+  Dataflow_Cast_Mfa_Lookup = dict:fetch(dataflow_cast_mfa_lookup, Dictionary),
+  Dataflow_Cast_Generic = dict:fetch(dataflow_cast_generic, Dictionary),
+
+  Res = [
+    {typesig_call_arity_lookup, Typesig_Call_Arity_Lookup},
+    {typesig_call_mfa_lookup, Typesig_Call_Mfa_Lookup},
+    {typesig_call_generic, Typesig_Call_Generic},
+
+    {typesig_cast_mfa_lookup, Typesig_Cast_Mfa_Lookup},
+    {typesig_cast_generic, Typesig_Cast_Generic},
+
+    {dataflow_call_arity_lookup, Dataflow_Call_Arity_Lookup},
+    {dataflow_call_mfa_lookup, Dataflow_Call_Mfa_Lookup},
+    {dataflow_call_generic, Dataflow_Call_Generic},
+
+    {dataflow_cast_mfa_lookup, Dataflow_Cast_Mfa_Lookup},
+    {dataflow_cast_generic, Dataflow_Cast_Generic},
+
 
     {known_bug, Known_Bug}
   ],
