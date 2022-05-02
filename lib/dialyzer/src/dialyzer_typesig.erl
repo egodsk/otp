@@ -1072,7 +1072,7 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
       ?log("[TYPESIG(~p)]: Plt lookup for: ~n~p~n~n", [_UniqueId, HandleCallMFA], State),
       %% INCREMENT CALL_MFA + INCREMENT KNOWN_NONE_BUG
       dialyzer_statistics:typesig_increment_call_mfa_lookup(),
-      dialyzer_statistics:increment_known_bug(),
+      dialyzer_statistics:typesig_increment_known_bug(),
 
       dialyzer_plt:lookup(Plt, HandleCallMFA);
     T ->
