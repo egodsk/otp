@@ -44,7 +44,7 @@ if [ -f $ERL_TOP/bin/dialyzer ]; then
     DIALYZER=$ERL_TOP/bin/dialyzer
 fi
 
-PLT=$(mktemp --suffix=.plt)
+PLT="$ERL_TOP/plt/plt.plt"
 
 set -x
 
