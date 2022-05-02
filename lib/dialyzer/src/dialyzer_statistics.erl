@@ -69,7 +69,7 @@ get_statistics() ->
 start() -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 % Server implementation
--spec init(any()) -> any().
+-spec init(any()) -> {ok, any()}.
 init([]) -> Dictionary = dict:from_list(
   [
     {typesig_call_arity_lookup, 0},
@@ -83,12 +83,12 @@ init([]) -> Dictionary = dict:from_list(
   ]),
   {ok, Dictionary}.
 
--spec handle_cast(any(), any()) -> any().
+-spec handle_cast(any(), any()) -> {noreply, any()}.
 handle_cast({increment, Who}, Dictionary) ->
   Dict2 = dict:update(Who, fun(Val) -> Val + 1 end, Dictionary),
   {noreply, Dict2}.
 
--spec handle_call(get_statistics, any(), any()) -> any().
+-spec handle_call(get_statistics, any(), any()) -> {reply, any(), any()}.
 handle_call(get_statistics, _From, Dictionary) ->
   Typesig_Call_Arity_Lookup = dict:fetch(typesig_call_arity_lookup, Dictionary),
   Typesig_Call_Mfa_Lookup = dict:fetch(typesig_call_mfa_lookup, Dictionary),
@@ -127,16 +127,16 @@ handle_call(get_statistics, _From, Dictionary) ->
 
   {reply, Res, Dictionary}.
 
--spec stop() -> any().
+-spec stop() -> ok.
 stop() ->
   gen_server:cast(?MODULE, stop).
 
--spec terminate(any(), any()) -> any().
+-spec terminate(any(), any()) -> ok.
 terminate(normal, _State) ->
   ok.
 %
 % - lets keep the compiler quiet with all the call-backs
--spec handle_info(any(), any()) -> any().
+-spec handle_info(any(), any()) -> {noreply, any()}.
 handle_info(_Message, Dictionary) -> {noreply, Dictionary}.
--spec code_change(any(), any(), any()) -> any().
+-spec code_change(any(), any(), any()) -> {ok, any()}.
 code_change(_OldVersion, Dictionary, _Extra) -> {ok, Dictionary}.
