@@ -40,15 +40,16 @@ echo "WARNINGS = $WARNINGS"
 
 DIALYZER=dialyzer
 
-if [ -f $ERL_TOP/bin/dialyzer ]; then
-    DIALYZER=$ERL_TOP/bin/dialyzer
+if [ -f $ERL_TOP/output/bin/dialyzer ]; then
+    echo "Using local dialyzer from output!"
+    DIALYZER=$ERL_TOP/output/bin/dialyzer
 fi
 
 PLT="$ERL_TOP/plt/plt.plt"
 
 set -x
 
-$DIALYZER --build_plt --output_plt "$PLT" -Wunknown --apps $BASE_PLT $APP_PLT --statistics
+($DIALYZER --check_plt --plt "$PLT") || ($DIALYZER --build_plt --output_plt "$PLT" -Wunknown --apps $BASE_PLT $APP_PLT --statistics)
 $DIALYZER -n --plt "$PLT" -Wunknown -Wunmatched_returns --apps $UNMATCHED --statistics
 $DIALYZER -n --plt "$PLT" -Wunknown --apps $NO_UNMATCHED --statistics
 if [ "X$WARNINGS" != "X" ]; then

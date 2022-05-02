@@ -1232,4 +1232,4 @@ test: all release release_tests
 	$(ERL_TOP)/make/test_target_script.sh $(ERL_TOP)
 
 dialyzer: all
-	$(ERL_TOP)/scripts/run-dialyzer
+	ERL_TOP=$(ERL_TOP) $(ERL_TOP)/scripts/run-dialyzer
