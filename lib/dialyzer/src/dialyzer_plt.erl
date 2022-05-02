@@ -179,7 +179,7 @@ insert_list(#plt{info = Info} = PLT, List) ->
   true = ets:insert(Info, List),
   PLT.
 
--spec lookup(plt(), integer() | mfa_patt()) ->
+-spec lookup(plt(), integer() | mfa_patt() | {atom(), atom(), integer(), atom(), integer()}) ->
         'none' | {'value', ret_args_types()}.
 lookup(Plt, {M, F, _A, Atom, Arity} = MFAAA) when is_atom(M), is_atom(F), is_atom(Atom), is_integer(Arity) ->
   lookup_1(Plt, MFAAA);
