@@ -613,8 +613,14 @@ return_value(State = #cl_state{code_server = CodeServer,
 			       output_plt = OutputPlt,
 			       plt_info = PltInfo,
                                error_location = EOpt,
-			       stored_warnings = StoredWarnings},
+			       stored_warnings = StoredWarnings, legal_warnings = LegalWarnings},
 	     Plt) ->
+  case ordsets:is_element(?WARN_GEN_SERVER_DEBUG, LegalWarnings) of
+    true ->
+      {_, NewPltInfo, _, _, _, _} = Plt,
+      io:format("PLT_INFO key-value pairs (good luck, Chuck): ~n~n~p~n~n", [ets:match_object(NewPltInfo, {'$0', '$1'})]);
+    false -> ok
+  end,
   %% Just for now:
   case CodeServer =:= none of
     true ->
