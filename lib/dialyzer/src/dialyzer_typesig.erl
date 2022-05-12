@@ -207,7 +207,9 @@ analyze_scc(SCC, NextLabel, CallGraph, CServer, Plt, PropTypes, Solvers0) ->
     true ->
       % Log what has been analysed for handle_call
       case lists:any(fun({_M, F, _A}) -> (F =:= handle_call) and (_A =:= 3) end, SCC) of
-        true -> ?log("[analyze_scc]: Analyzed scc for handle_call and got the following result:~n~p~n~n", [T], State3);
+        true -> _UniqueId = erlang:phash2({erlang:monotonic_time(), erlang:unique_integer()}),
+                ?log("[analyze_scc(~p)]: Analyzed scc for handle_call and got the following result:~n~p~n~n", [_UniqueId, T], State3),
+                ?log("[analyze_scc(~p)]: Analyzed scc for handle_call of the following state:~n~p~n~n", [_UniqueId, State3], State3);
         _ -> ok
       end;
     false -> ok
