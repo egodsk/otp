@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1998-2021. All Rights Reserved.
+%% Copyright Ericsson AB 1998-2022. All Rights Reserved.
 %% 
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -31,9 +31,10 @@
 %% XXX - we should pick a port that we _know_ is closed. That's pretty hard.
 -define(CLOSED_PORT, 6666).
 
--export([all/0, suite/0,groups/0,init_per_suite/1, end_per_suite/1, 
-	 init_per_group/2,end_per_group/2]).
--export([init_per_testcase/2, end_per_testcase/2]).
+-export([all/0, suite/0, groups/0,
+         init_per_suite/1, end_per_suite/1, 
+	 init_per_group/2, end_per_group/2,
+         init_per_testcase/2, end_per_testcase/2]).
 
 -export([
 	 send_to_closed/1, active_n/1,
@@ -52,7 +53,12 @@
 	 socket_monitor2/1,
 	 socket_monitor2_manys/1,
 	 socket_monitor2_manyc/1,
-	 otp_17492/1
+	 otp_17492/1,
+
+         t_simple_local_sockaddr_in_send_recv/1,
+         t_simple_link_local_sockaddr_in_send_recv/1,
+         t_simple_local_sockaddr_in6_send_recv/1,
+         t_simple_link_local_sockaddr_in6_send_recv/1
 	]).
 
 
@@ -88,7 +94,9 @@ groups() ->
      {inet_backend_socket,    [], inet_backend_socket_cases()},
 
      {local,                  [], local_cases()},
-     {socket_monitor,         [], socket_monitor_cases()}
+     {socket_monitor,         [], socket_monitor_cases()},
+
+     {sockaddr,               [], sockaddr_cases()}
     ].
 
 inet_backend_default_cases() ->
@@ -119,7 +127,8 @@ all_cases() ->
      {group, local},
      recv_close,
      {group, socket_monitor},
-     otp_17492
+     otp_17492,
+     {group, sockaddr}
     ].
 
 local_cases() ->
@@ -140,6 +149,14 @@ socket_monitor_cases() ->
      socket_monitor2,
      socket_monitor2_manys,
      socket_monitor2_manyc
+    ].
+
+sockaddr_cases() ->
+    [
+     t_simple_local_sockaddr_in_send_recv,
+     t_simple_link_local_sockaddr_in_send_recv,
+     t_simple_local_sockaddr_in6_send_recv,
+     t_simple_link_local_sockaddr_in6_send_recv
     ].
 
 
@@ -201,12 +218,29 @@ init_per_group(inet_backend_socket = _GroupName, Config) ->
             [{socket_create_opts, [{inet_backend, socket}]} | Config]
     end;
 init_per_group(local, Config) ->
+    ?P("init_per_group(local) -> do we support 'local'"),
     case ?OPEN(Config, 0, [local]) of
 	{ok,S} ->
+            ?P("init_per_group(local) -> we support 'local'"),
 	    ok = gen_udp:close(S),
 	    Config;
 	{error, eafnosupport} ->
+            ?P("init_per_group(local) -> we *do not* support 'local'"),
 	    {skip, "AF_LOCAL not supported"}
+    end;
+init_per_group(sockaddr = _GroupName, Config) ->
+    ?P("init_per_group(sockaddr) -> do we support 'socket'"),
+    try socket:info() of
+	_ ->
+            ?P("init_per_group(sockaddr) -> we support 'socket'"),
+            Config
+    catch
+        error : notsup ->
+            ?P("init_per_group(sockaddr) -> we *do not* support 'socket'"),
+            {skip, "esock not supported"};
+        error : undef ->
+            ?P("init_per_group(sockaddr) -> 'socket' not configured"),
+            {skip, "esock not configured"}
     end;
 init_per_group(_GroupName, Config) ->
     Config.
@@ -616,18 +650,34 @@ read_packets(Config) when is_list(Config) ->
 			   ok
 		   end
 	   end,
-    TC   = fun() -> do_read_packets(Config) end,
-    ?TC_TRY(?FUNCTION_NAME, Cond, TC).
+    Pre  = fun() ->
+                   ?P("~w:pre -> try create node", [?FUNCTION_NAME]),
+                   {ok, Node} = start_node(gen_udp_SUITE_read_packets),
+                   ?P("~w:pre -> node created", [?FUNCTION_NAME]),
+                   Node
+           end,
+    TC   = fun(Node) ->
+                   ?P("~w:tc -> begin", [?FUNCTION_NAME]),
+                   Res = do_read_packets(Config, Node),
+                   ?P("~w:tc -> done", [?FUNCTION_NAME]),
+                   Res
+           end,
+    Post = fun(Node) ->
+                   ?P("~w:post -> try stop node ~p", [?FUNCTION_NAME, Node]),
+                   stop_node(Node),
+                   ?P("~w:post -> done", [?FUNCTION_NAME]),
+                   ok
+           end,
+    ?TC_TRY(?FUNCTION_NAME, Cond, Pre, TC, Post).
 
-do_read_packets(Config) when is_list(Config) ->
+do_read_packets(Config, Node) when is_list(Config) ->
     N1   = 5,
     N2   = 1,
     Msgs = 30000,
     ?P("open socket (with read-packets: ~p)", [N1]),
     {ok, R}   = ?OPEN(Config, 0, [{read_packets,N1}]),
     {ok, RP}  = inet:port(R),
-    ?P("create slave node"),
-    {ok,Node} = start_node(gen_udp_SUITE_read_packets),
+
     %%
     ?P("perform read-packets test"),
     {V1, Trace1} = read_packets_test(Config, R, RP, Msgs, Node),
@@ -641,8 +691,6 @@ do_read_packets(Config) when is_list(Config) ->
     ?P("verify read-packets (to ~w)", [N2]),
     {ok, [{read_packets,N2}]} = inet:getopts(R, [read_packets]),
     %%
-    ?P("stop slave node"),
-    stop_node(Node),
 
     ?P("dump trace 1"),
     dump_terms(Config, "trace1.terms", Trace1),
@@ -2343,6 +2391,408 @@ do_otp_17492(Config) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%% This is the most basic of tests.
+
+%% Here we use socket:sockaddr_in6() when creating and using the
+%% socket(s).
+%%
+t_simple_local_sockaddr_in6_send_recv(Config) when is_list(Config) ->
+    ?TC_TRY(?FUNCTION_NAME,
+            fun() -> ?LIB:has_support_ipv6() end,
+            fun() ->
+                    Domain = inet6,
+                    LocalAddr =
+                        case ?LIB:which_local_addr(Domain) of
+                            {ok, LA} ->
+                                LA;
+                        {error, _} ->
+                            skip("No local address")
+                    end,
+                    SockAddr = #{family   => Domain,
+                                 addr     => LocalAddr,
+                                 port     => 0},
+                    do_simple_sockaddr_send_recv(SockAddr, Config)
+            end).
+
+
+t_simple_link_local_sockaddr_in6_send_recv(Config) when is_list(Config) ->
+    ?TC_TRY(?FUNCTION_NAME,
+            fun() ->
+                    ?LIB:has_support_ipv6(),
+                    is_net_supported(),
+                    is_not_darwin()
+            end,
+            fun() ->
+                    Domain = inet6,
+                    LinkLocalAddr =
+                        case ?LIB:which_link_local_addr(Domain) of
+                            {ok, LLA} ->
+                                LLA;
+                            {error, _} ->
+                                skip("No link local address")
+                        end,
+                    Filter =
+                        fun(#{addr := #{family := D,
+                                        addr   := A}} = C) ->
+                                if 
+                                    (D =:= Domain) andalso
+                                    (A =:= LinkLocalAddr) ->
+                                        ?P("found link-local candidate: "
+                                           "~n   ~p", [C]),
+                                        true;
+                                    true ->
+                                        false
+                                end;
+                           (_) ->
+                                false
+                        end,
+                    case net:getifaddrs(Filter) of
+                        {ok, [#{addr := #{scope_id := ScopeID}}=H|T]} ->
+                            ?P("found link-local candidate(s): "
+                               "~n   Candidate:       ~p"
+                               "~n   Rest Candidate:  ~p", [H, T]),
+                            SockAddr = #{family   => Domain,
+                                         addr     => LinkLocalAddr,
+                                         port     => 0,
+                                         scope_id => ScopeID},
+                            do_simple_sockaddr_send_recv(SockAddr, Config);
+                        {ok, _} ->
+                            skip("Scope ID not found");
+                        {error, R} ->
+                            skip({failed_getifaddrs, R})
+                    end
+            end).
+
+t_simple_local_sockaddr_in_send_recv(Config) when is_list(Config) ->
+    ct:timetrap(?MINS(1)),
+    ?TC_TRY(?FUNCTION_NAME,
+            fun() -> ok end,
+            fun() ->
+                    Domain = inet,
+                    LocalAddr =
+                        case ?LIB:which_local_addr(Domain) of
+                            {ok, LA} ->
+                                LA;
+                        {error, _} ->
+                            skip("No local address")
+                    end,
+                    SockAddr = #{family   => Domain,
+                                 addr     => LocalAddr,
+                                 port     => 0},
+                    do_simple_sockaddr_send_recv(SockAddr, Config)
+            end).
+
+t_simple_link_local_sockaddr_in_send_recv(Config) when is_list(Config) ->
+    ?TC_TRY(?FUNCTION_NAME,
+            fun() -> ok end,
+            fun() ->
+                    Domain = inet,
+                    LinkLocalAddr =
+                        case ?LIB:which_link_local_addr(Domain) of
+                            {ok, LLA} ->
+                                LLA;
+                            {error, _} ->
+                                skip("No link local address")
+                        end,
+                    SockAddr = #{family => Domain,
+                                 addr   => LinkLocalAddr,
+                                 port   => 0},
+                    do_simple_sockaddr_send_recv(SockAddr, Config)
+            end).
+
+
+do_simple_sockaddr_send_recv(#{family := _Fam} = SockAddr, _) ->
+    %% Create the server
+    Self   = self(),
+    ?P("~n      SockAddr: ~p", [SockAddr]),
+    ServerF = fun() ->
+                      ?P("[server] try create socket"),
+                      Sock =
+                          try gen_udp:open(0, [{ifaddr, SockAddr},
+                                               {active, true},
+                                               binary]) of
+                              {ok, S} ->
+                                  S;
+                              {error, OReason} ->
+                                  ?P("[server] open error: "
+                                     "~n      Reason: ~p", [OReason]),
+                                  exit({open_error, OReason})
+                          catch
+                              OC:OE:OS ->
+                                  ?P("[server] open failure: "
+                                     "~n      Error Class: ~p"
+                                     "~n      Error:       ~p"
+                                     "~n      Call Stack:  ~p", [OC, OE, OS]),
+                                  exit({open_failure, {OC, OE, OS}})
+                          end,
+                      ?P("[server] try get port"),
+                      {ok, Port}  = inet:port(Sock),
+                      ?P("[server] port: ~w", [Port]),
+                      Self ! {{port, Port}, self()},
+
+
+                      %% --- message sequance 1 ---
+
+                      ?P("[server] await message 1"),
+                      {CIP, CPort} =
+                          receive
+                              {udp, Sock, CIP1, CPort1, <<"hej">>} ->
+                                  ?P("[server] received expected message 1 - "
+                                     "connect to *this* client"),
+                                  ok = gen_udp:connect(Sock, CIP1, CPort1),
+                                  ?P("[server] send reply"),
+                                  case gen_udp:send(Sock, "hopp") of
+                                      ok -> 
+                                          {CIP1, CPort1};
+                                      {error, ehostunreach = Reason1} ->
+                                          ?P("[server] send failed: ~p",
+                                             [Reason1]),
+                                          exit({skip, Reason1});
+                                      {error, Reason1} ->
+                                          exit({send_failed, Reason1})
+                                  end
+                          after 5000 ->
+                                  ?P("[server] receive (1) timeout:"
+                                     "~n      ~p", [mq()]),
+                                  exit(receive_timeout)
+                          end,
+
+
+                      %% --- message sequance 2 ---
+
+                      ?P("[server] await message 2"),
+                      receive
+                          {udp, Sock, CIP2, CPort2, <<"hej">>}
+                            when (CIP2 =:= CIP) andalso (CPort2 =:= CPort) ->
+                              ?P("[server] received expected message 2 - "
+                                 "send reply"),
+                              case gen_udp:send(Sock, "hopp") of
+                                  ok -> 
+                                      ok;
+                                  {error, ehostunreach = Reason2} ->
+                                      ?P("[server] send failed: ~p",
+                                         [Reason2]),
+                                      exit({skip, Reason2});
+                                  {error, Reason2} ->
+                                      exit({send_failed, Reason2})
+                              end
+                      after 5000 ->
+                              ?P("[server] receive (2) timeout:"
+                                 "~n      ~p", [mq()]),
+                              exit(receive_timeout)
+                      end,
+
+
+                      %% --- message sequance 3 ---
+
+                      ?P("[server] await message 3"),
+                      receive
+                          {udp, Sock, CIP3, CPort3, <<"hej">>}
+                            when (CIP3 =:= CIP) andalso (CPort3 =:= CPort) ->
+                              ?P("[server] received expected message 3 - "
+                                 "send reply"),
+                              ok = gen_udp:send(Sock, "hopp")
+                      after 5000 ->
+                              ?P("[server] receive (3) timeout:"
+                                 "~n      ~p", [mq()]),
+                              exit(receive_timeout)
+                      end,
+
+
+                      %% --- message sequance 4 ---
+
+                      ?P("[server] await message 4 - should be none!"),
+                      receive
+                          {udp, Sock, CIP4, CPort4, <<"hej">>} ->
+                              ?P("[server] received unexpected message 4:"
+                                 "~n      Address: ~p"
+                                 "~n      Port:    ~p", [CIP4, CPort4]),
+                              exit({unexpected_message, CIP4, CPort4})
+                      after
+                          1000 ->
+                              ?P("Received nothing - expected"),
+                              Self ! {nothing, self()}
+                      end,
+
+                      ?P("[server] await termination command"),
+                      receive
+                          {die, Self} ->
+                              ?P("[server] terminating"),
+                              (catch gen_udp:close(Sock)),
+                              exit(normal)
+                      end
+              end,
+    ?P("try start server"),
+    Server = spawn_link(ServerF),
+    ?P("server started - await port "),
+    ServerPort = receive
+                     {{port, Port}, Server} ->
+                         Port;
+                     {'EXIT', Server, Reason} ->
+                         ?P("server died unexpectedly: "
+                            "~n      ~p", [Reason]),
+                         exit({unexpected_server_failure, Reason})
+                 end,
+    ?P("server port received: ~p", [ServerPort]),
+    
+    ?P("try connect to server"),
+    ServerSockAddr = SockAddr#{port => ServerPort},
+    {ok, CSock1} = gen_udp:open(0,
+                                [{ifaddr, SockAddr},
+                                 {active, true},
+                                 binary]),
+    {ok, CSock2} = gen_udp:open(0,
+                                [{ifaddr, SockAddr},
+                                 {active, true},
+                                 binary]),
+    ?P("client socket: "
+       "~n      CSock 1: ~p"
+       "~n      CPort 1: ~p"
+       "~n      CSock 2: ~p"
+       "~n      CPort 2: ~p",
+       [CSock1, inet:port(CSock1), CSock2, inet:port(CSock2)]),
+
+
+    %% --- message sequance 1 ---
+
+    ?P("[csock 1] try (trad = address and port) send message 1"),
+    case gen_udp:send(CSock1, maps:get(addr, SockAddr), ServerPort, "hej") of
+        ok ->
+            ok;
+        {error, ehostunreach = Reason1} ->
+            ?SKIPT(?F("send (1,1) failed: ~p", [Reason1]));
+        {error, Reason1} ->
+            ct:fail({send_failed, Reason1})
+    end,
+                 
+
+    ?P("[csock 1] await reply message 1"),
+    receive
+        {udp, CSock1, _, _, <<"hopp">>} ->
+            ?P("[csock 1] received expected reply message 1"),
+            ok;
+
+        {'EXIT', Server, {skip, SReason1}} ->
+            ?P("received unexpected server skip exit (1):"
+               "~n      ~p", [SReason1]),
+            ?SKIPT(?F("server send (1,1) failed: ~p", [SReason1]));
+
+        {'EXIT', Server, SReason1} ->
+            ?P("received unexpected server exit (1):"
+               "~n      ~p", [SReason1]),
+            ct:fail({unexpected_server_exit, 1, SReason1})
+
+    after 5000 ->
+            ?P("receive (1) timeout:"
+               "~n      ~p", [mq()]),
+            ct:fail(receive_timeout)
+    end,
+
+
+    %% --- message sequance 2 ---
+
+    ?P("[csock 1] try (sockaddr) send message 2"),
+    %% DstSockAddr = #{family => maps:get(family, SockAddr),
+    %%                 addr   => maps:get(addr, SockAddr),
+    %%                 port   => ServerPort},
+    DstSockAddr = ServerSockAddr,
+    case gen_udp:send(CSock1, DstSockAddr, "hej") of
+        ok ->
+            ok;
+        {error, ehostunreach = Reason2} ->
+            ?SKIPT(?F("send (1,2) failed: ~p", [Reason2]));
+        {error, Reason2} ->
+            ct:fail({send_failed, Reason2})
+    end,
+        
+
+    ?P("[csock 1] await reply message 2"),
+    receive
+        {udp, CSock1, _, _, <<"hopp">>} ->
+            ?P("[csock 1] received expected reply message 2"),
+            ok;
+
+        {'EXIT', Server, {skip, SReason2}} ->
+            ?P("received unexpected server skip exit (2):"
+               "~n      ~p", [SReason2]),
+            ?SKIPT(?F("server send (1,2) failed: ~p", [SReason2]));
+
+        {'EXIT', Server, SReason2} ->
+            ?P("received unexpected server exit (2):"
+               "~n.     ~p", [SReason2]),
+            ct:fail({unexpected_server_exit, 2, SReason2})
+
+    after 5000 ->
+            ?P("[csock 1] receive (2) timeout:"
+               "~n      ~p", [mq()]),
+            ct:fail(receive_timeout)
+    end,
+
+
+    %% --- message sequance 3 ---
+
+    ?P("[csock 1] try connect to: "
+       "~n      ~p", [ServerSockAddr]),
+    ok = gen_udp:connect(CSock1, DstSockAddr),
+
+    ?P("[csock 1] try send message 3"),
+    ok = gen_udp:send(CSock1, "hej"),
+
+    ?P("[csock 1] await reply message 3"),
+    receive
+        {udp, CSock1, _, _, <<"hopp">>} ->
+            ?P("received expected reply message 3"),
+            ok;
+
+        {'EXIT', Server, SReason3} ->
+            ?P("received unexpected server exit (3):"
+               "~n.     ~p", [SReason3]),
+            ct:fail({unexpected_server_exit, 3, SReason3})
+
+    after 5000 ->
+            ?P("[csock 1] receive (2) timeout:"
+               "~n      ~p", [mq()]),
+            ct:fail(receive_timeout)
+
+    end,
+
+
+    %% --- message sequance 4 ---
+
+    ?P("[csock 2] try (sockaddr) send message 4"),
+    ok = gen_udp:send(CSock2, DstSockAddr, "hej"),
+
+    ?P("[csock 2] await reply message 4 - expect failure"),
+    receive
+        {udp, CSock2, _, _, <<"hopp">>} ->
+            ?P("[csock 2] received unexpected reply message 4"),
+            exit(received_unexpected_message);
+        {nothing, Server} ->
+            ?P("[csock 2] server received nothing - expected"),
+            ok
+    end,
+
+
+    ?P("terminate server"),
+    Server ! {die, self()},
+
+    ?P("await server termination"),
+    receive
+        {'EXIT', Server, normal} ->
+            ok
+    end,
+    
+    ?P("cleanup"),
+    (catch gen_udp:close(CSock1)),
+    (catch gen_udp:close(CSock2)),
+
+    ?P("done"),
+    ok.
+
+    
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 ok({ok,V}) -> V;
 ok(NotOk) ->
     try throw(not_ok)
@@ -2385,6 +2835,40 @@ get_localaddr([Localhost|Ls]) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+is_net_supported() ->
+    try net:info() of
+        #{} ->
+            ok
+    catch
+        error : notsup ->
+            not_supported(net)
+    end.
+
+
+is_not_darwin() ->
+    is_not_platform(darwin, "Darwin").
+
+is_not_platform(Platform, PlatformStr)
+  when is_atom(Platform) andalso is_list(PlatformStr) ->
+      case os:type() of
+        {unix, Platform} ->
+            skip("This does not work on " ++ PlatformStr);
+        _ ->
+            ok
+    end.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+not_supported(What) ->
+    skip({not_supported, What}).
+
+skip(Reason) ->
+    throw({skip, Reason}).
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 which_info(Sock) ->
     which_info([istate, active], inet:info(Sock), #{}).
 
@@ -2399,6 +2883,9 @@ which_info([Key|Keys], Info, Acc) ->
     end.
 
 
+mq() ->
+    pi(messages).
+
 pi(Item) ->
     {Item, Val} = process_info(self(), Item),
     Val.
@@ -2411,11 +2898,10 @@ pi(Item) ->
 %%
 
 start_node(Name) ->
-    Pa = filename:dirname(code:which(?MODULE)),
-    test_server:start_node(Name, slave, [{args, "-pa " ++ Pa}]).
+    ?START_NODE(Name, []).
 
 stop_node(Node) ->
-    test_server:stop_node(Node).
+    ?STOP_NODE(Node).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

@@ -1,7 +1,7 @@
 %
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1999-2021. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -112,6 +112,7 @@
          use_all_eddh_generate_compute/1,
          pbkdf2_hmac/0,
          pbkdf2_hmac/1,
+         privkey_to_pubkey/1,
 
          %% Others:
          aes_128_cbc/1,
@@ -346,10 +347,13 @@ groups() ->
      {rsa,                  [], [sign_verify,
                                  public_encrypt,
                                  private_encrypt,
-                                 generate
+                                 generate,
+                                 privkey_to_pubkey
                                 ]},
      {dss,                  [], [sign_verify
                                  %% Does not work yet:  ,public_encrypt, private_encrypt
+                                 %% dsa seem to always have been given bad result. Must fix:
+                                 %%      ,privkey_to_pubkey
                                 ]},
      {ecdsa,                [], [sign_verify, use_all_ec_sign_verify
                                  %% Does not work yet:  ,public_encrypt, private_encrypt
@@ -549,7 +553,16 @@ init_per_testcase(generate, Config) ->
 init_per_testcase(hmac, Config) ->
     configure_mac(hmac, proplists:get_value(type,Config), Config);
 init_per_testcase(_Name,Config) ->
-    Config.
+    Skip =
+        lists:member(_Name, [%%i_ng_tls
+%%                            , node_supports_cache
+                            ]) andalso
+        asan == maps:get(compile_type, crypto:info(), undefined) andalso
+        lists:prefix("OpenSSL 3.0.0 ", maps:get(cryptolib_version_linked, crypto:info(), "")),
+    case Skip of
+        true -> {skip, "Coredumps 3.0.0 asan"};
+        false -> Config
+    end.
 
 end_per_testcase(info, Config) ->
     Config;
@@ -858,8 +871,13 @@ api_ng_tls() ->
      [{doc, "Test special tls api"}].
 
 api_ng_tls(Config) when is_list(Config) ->
-    [_|_] = Ciphers = lazy_eval(proplists:get_value(cipher, Config, [])),
-    lists:foreach(fun do_api_ng_tls/1, Ciphers).
+    try
+        [_|_] = Ciphers = lazy_eval(proplists:get_value(cipher, Config, [])),
+        lists:foreach(fun do_api_ng_tls/1, Ciphers)
+    catch
+        error:{notsup,_,Reason} ->
+            {skip, Reason}
+    end.
 
 
 do_api_ng_tls({Type, Key, PlainTexts}) ->
@@ -1072,6 +1090,23 @@ private_encrypt(Config) when is_list(Config) ->
     lists:foreach(fun do_private_encrypt/1, Params).
 
 %%--------------------------------------------------------------------
+privkey_to_pubkey(Config) ->
+    Params = proplists:get_value(privkey_to_pubkey, Config),
+    lists:foreach(fun do_privkey_to_pubkey/1, Params).
+
+do_privkey_to_pubkey({Type, Priv, Pub}) ->
+    ct:log("~p:~p~nType = ~p,~nPriv = ~p,~n  Pub = ~p", [?MODULE,?LINE,Type,Priv,Pub]),
+    case crypto:privkey_to_pubkey(Type, Priv) of
+        Pub ->
+            ok;
+        Priv ->
+            ct:fail("Returned private key", []);
+        Other ->
+            ct:log("~p:~p Other = ~p", [?MODULE,?LINE,Other]),
+            ct:fail("bad", [])
+    end.
+
+%%--------------------------------------------------------------------
 generate_compute() ->
      [{doc, " Test crypto:genarate_key and crypto:compute_key"}].
 generate_compute(Config) when is_list(Config) ->
@@ -1276,7 +1311,7 @@ info(_Config) ->
             ok;
         Other ->
             ct:log("Ver = ~p~ncrypto:info() -> ~p", [Ver,Other]),
-            ct:fail("Version missmatch", [])
+            ct:fail("Version mismatch", [])
     catch
         C:E ->
             ct:log("Exception ~p:~p", [C,E]),
@@ -1999,9 +2034,11 @@ group_config(rsa, Config) ->
                  [{rsa_padding,rsa_pkcs1_oaep_padding}, {rsa_mgf1_md,sha}, {rsa_oaep_label, <<"Hej hopp">>}],
                  [{rsa_padding,rsa_pkcs1_oaep_padding}, {rsa_mgf1_md,sha}, {rsa_oaep_md,sha}, {rsa_oaep_label, <<"Hej hopp">>}]
                  ],
-    [{sign_verify,      rsa_sign_verify_tests(Config, Msg, Public, Private, PublicS, PrivateS, SignVerify_OptsToTry)},
+    RsaSignVerify = rsa_sign_verify_tests(Config, Msg, Public, Private, PublicS, PrivateS, SignVerify_OptsToTry),
+    [{sign_verify,      RsaSignVerify},
      {pub_priv_encrypt, gen_rsa_pub_priv_tests(PublicS, PrivateS, MsgPubEnc, PrivEnc_OptsToTry)},
      {pub_pub_encrypt,  gen_rsa_pub_priv_tests(PublicS, PrivateS, MsgPubEnc, PubEnc_OptsToTry)},
+     {privkey_to_pubkey, get_priv_pub_from_sign_verify(RsaSignVerify)},
      {generate, [{rsa, 1024, 3},  {rsa, 2048, 17},  {rsa, 3072, 65537}]}
      | Config];
 group_config(dss = Type, Config) ->
@@ -2023,7 +2060,10 @@ group_config(dss = Type, Config) ->
                      lists:member(Hash, SupportedHashs)],
     MsgPubEnc = <<"7896345786348 Asldi">>,
     PubPrivEnc = [{dss, Public, Private, MsgPubEnc, []}],
-    [{sign_verify, SignVerify}, {pub_priv_encrypt, PubPrivEnc}  | Config];
+    [{sign_verify, SignVerify},
+     {pub_priv_encrypt, PubPrivEnc},
+     {privkey_to_pubkey, get_priv_pub_from_sign_verify(SignVerify)}
+     | Config];
 group_config(ecdsa = Type, Config) ->
     {Private, Public} = ec_key_named(),
     Msg = ec_msg(),
@@ -4287,12 +4327,12 @@ bad_combo(_Config) ->
                   error:_).
 
 bad_key_length(_Config) ->
-    ?chk_api_name(crypto:crypto_dyn_iv_init(des_ede3_cbc, <<1>>, true),
-                  error:{error,{"api_ng.c",_},"Can't initialize context, key_length"}).
+    ?chk_api_name(crypto:crypto_init(aes_128_ctr, <<1>>, <<0:128>>, true),
+                  error:{badarg,_,"Bad key size"++_}).
 
 bad_cipher_name(_Config) ->
     ?chk_api_name(crypto:crypto_init(foobar, <<1:128>>, true),
-                  error:{badarg,{"api_ng.c",_Line},"Unknown cipher"}).
+                  error:{badarg,{"api_ng.c",_Line},"Unknown cipher"++_}).
 
 bad_generate_key_name(_Config) ->
     ?chk_api_name(crypto:generate_key(foobar, [1024]),
@@ -4409,3 +4449,12 @@ pbkdf2_hmac(Config) when is_list(Config) ->
     error:{notsup, _, "Unsupported CRYPTO_PKCS5_PBKDF2_HMAC"} ->
             {skip, "No CRYPTO_PKCS5_PBKDF2_HMAC"}
   end.
+
+
+get_priv_pub_from_sign_verify(L) ->
+    lists:foldl(fun get_priv_pub/2, [], L).
+
+get_priv_pub({Type, undefined=_Hash, Private, Public, _Msg, _Signature}, Acc) -> [{Type,Private,Public} | Acc];
+get_priv_pub({Type, _Hash, Public, Private, _Msg}, Acc) -> [{Type,Private,Public} | Acc];
+get_priv_pub({Type, _Hash, Public, Private, _Msg, _Options}, Acc) -> [{Type,Private,Public} | Acc];
+get_priv_pub(_, Acc) -> Acc.

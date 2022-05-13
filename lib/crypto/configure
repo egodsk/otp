@@ -621,6 +621,7 @@ ac_includes_default="\
 
 ac_subst_vars='LTLIBOBJS
 LIBOBJS
+DISABLE_OTP_TEST_ENGINE
 DISABLE_EVP_HMAC
 DISABLE_EVP_DH
 SSL_DYNAMIC_ONLY
@@ -633,7 +634,6 @@ SSL_LIBDIR
 SSL_INCDIR
 SSL_INCLUDE
 DED_OSTYPE
-DED_THR_DEFS
 DED_LIBS
 DED_WERRORFLAGS
 DED_WARN_FLAGS
@@ -645,6 +645,7 @@ DED_SYS_INCLUDE
 DED_EXT
 DED_GCC
 DED_CC
+DED_THR_DEFS
 EGREP
 GREP
 MIXED_MINGW
@@ -747,6 +748,7 @@ with_ssl_rpath
 enable_dynamic_ssl_lib
 enable_evp_dh
 enable_evp_hmac
+enable_otp_test_engine
 enable_deprecated_warnings
 enable_fips
 '
@@ -1420,6 +1422,10 @@ Optional Features:
                           the crypto NIF
   --disable-evp-dh        intentionally undocumented workaround
   --disable-evp-hmac      intentionally undocumented workaround
+  --disable-otp-test-engine
+                          Disable build of the otp_test_engine. (default is
+                          --enable-otp-test-engine, unless for LibreSSL >=
+                          3.5.0 where default is --disable-otp-test-engine)
   --disable-deprecated-warnings
                           disable warnings for deprecated functions in
                           cryptolib (default is to warn, except for OpenSSL
@@ -1462,7 +1468,7 @@ Some influential environment variables:
   CXX         C++ compiler
   CXXFLAGS    C++ compiler flags
   LD          linker (is often overridden by configure)
-  LDFLAGS     linker flags (can be risky to set since LD may be overriden by
+  LDFLAGS     linker flags (can be risky to set since LD may be overridden by
               configure)
   LIBS        libraries
   DED_LD      linker for Dynamic Erlang Drivers (set all DED_LD* variables or
@@ -2487,6 +2493,11 @@ ac_link='$CC -o conftest$ac_exeext $CFLAGS $CPPFLAGS $LDFLAGS conftest.$ac_ext $
 ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
+
+## Delete previous failed configure results
+if test -f ./CONF_INFO; then
+   rm ./CONF_INFO
+fi
 
 ac_aux_dir=
 for ac_dir in ${ERL_TOP}/erts/autoconf; do
@@ -3974,9 +3985,6 @@ done
 
 
 
-USER_LD=$LD
-USER_LDFLAGS="$LDFLAGS"
-
 
 
 NEED_NPTL_PTHREAD_H=no
@@ -4427,6 +4435,19 @@ fi
 
 
 
+if test "$THR_DEFS" = ""; then
+    DED_THR_DEFS="-D_THREAD_SAFE -D_REENTRANT"
+else
+    DED_THR_DEFS="$THR_DEFS"
+fi
+
+
+
+
+
+USER_LD=$LD
+USER_LDFLAGS="$LDFLAGS"
+
 DED_CC=$CC
 DED_GCC=$GCC
 
@@ -4441,7 +4462,6 @@ case $host_os in
      *)
         ;;
 esac
-
 
 DED_WARN_FLAGS="-Wall -Wstrict-prototypes"
 case "$host_cpu" in
@@ -4586,12 +4606,6 @@ $as_echo "no" >&6; }
 DED_SYS_INCLUDE="-I${ERL_TOP}/erts/emulator/beam -I${ERL_TOP}/erts/include -I${ERL_TOP}/erts/include/$host -I${ERL_TOP}/erts/include/internal -I${ERL_TOP}/erts/include/internal/$host -I${ERL_TOP}/erts/emulator/sys/$DED_OSTYPE -I${ERL_TOP}/erts/emulator/sys/common"
 DED_INCLUDE=$DED_SYS_INCLUDE
 
-if test "$THR_DEFS" = ""; then
-    DED_THR_DEFS="-D_THREAD_SAFE -D_REENTRANT"
-else
-    DED_THR_DEFS="$THR_DEFS"
-fi
-# DED_EMU_THR_DEFS=$EMU_THR_DEFS
 DED_CFLAGS="$CFLAGS $CPPFLAGS $DED_CFLAGS"
 if test "x$GCC" = xyes; then
     # Use -fno-common for gcc, that is link error if multiple definitions of
@@ -4695,9 +4709,18 @@ case $host_os in
 		DED_LDFLAGS="-Bshareable"
 	;;
 	darwin*)
-		# Mach-O linker: a shared lib and a loadable
-		# object file is not the same thing.
-		DED_LDFLAGS="-bundle -bundle_loader ${ERL_TOP}/bin/$host/beam.smp"
+		# Mach-O linker: a shared lib and a loadable object file is not the same thing.
+
+                if test "X${ERL_DED_FLAT_BUNDLE}" = "Xtrue"; then
+                  # EI sets this variable when building its .so file as beam.smp
+                  # has not been built yet and any ei lib will not
+                  # link to beam.smp anyways
+		  DED_LDFLAGS="-bundle -flat_namespace -undefined suppress"
+                else
+                  # Cannot use flat namespaces for drivers/nifs as that may cause
+                  # symbols to collide during loading
+		  DED_LDFLAGS="-bundle -bundle_loader ${ERL_TOP}/bin/$host/beam.smp"
+                fi
 		# DED_LDFLAGS_CONFTEST is for use in configure tests only. We
 		# cannot use DED_LDFLAGS in configure tests since beam.smp has not
 		# been built yet...
@@ -4948,6 +4971,7 @@ fi
 
 
 
+
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for multiarch directory" >&5
 $as_echo_n "checking for multiarch directory... " >&6; }
 multiarch_dir=
@@ -5093,6 +5117,18 @@ if test "${enable_evp_hmac+set}" = set; then :
   esac
 else
   DISABLE_EVP_HMAC=0
+fi
+
+
+
+# Check whether --enable-otp-test-engine was given.
+if test "${enable_otp_test_engine+set}" = set; then :
+  enableval=$enable_otp_test_engine;  case "$enableval" in
+    no)   DISABLE_OTP_TEST_ENGINE=yes;;
+    *)    DISABLE_OTP_TEST_ENGINE=no;;
+  esac
+else
+  DISABLE_OTP_TEST_ENGINE=default
 fi
 
 
@@ -5283,6 +5319,28 @@ else
   v3_include=no
 fi
 rm -f conftest*
+
+
+if test "x$DISABLE_OTP_TEST_ENGINE" = "xdefault"; then
+# Get default value for the --disable-otp-test-engine. Depends on cryptolib version
+          cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+#include <openssl/opensslv.h>
+#if LIBRESSL_VERSION_NUMBER >= 0x3050000fL
+yes
+#endif
+
+_ACEOF
+if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
+  $EGREP "^yes.?$" >/dev/null 2>&1; then :
+  DISABLE_OTP_TEST_ENGINE=yes
+else
+  DISABLE_OTP_TEST_ENGINE=no
+fi
+rm -f conftest*
+
+    fi
 
     CPPFLAGS="$save_CPPFLAGS"
 
@@ -5689,6 +5747,28 @@ else
 fi
 rm -f conftest*
 
+
+if test "x$DISABLE_OTP_TEST_ENGINE" = "xdefault"; then
+# Get default value for the --disable-otp-test-engine. Depends on cryptolib version
+          cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+/* end confdefs.h.  */
+
+#include <openssl/opensslv.h>
+#if LIBRESSL_VERSION_NUMBER >= 0x3050000fL
+yes
+#endif
+
+_ACEOF
+if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
+  $EGREP "^yes.?$" >/dev/null 2>&1; then :
+  DISABLE_OTP_TEST_ENGINE=yes
+else
+  DISABLE_OTP_TEST_ENGINE=no
+fi
+rm -f conftest*
+
+    fi
+
     CPPFLAGS="$save_CPPFLAGS"
 
     if test $valid_include != yes; then
@@ -6071,7 +6151,7 @@ $as_echo "" >&6; }
     test $dir_lib32 = yes && libdirs="/lib32 $libdirs"
 
     #
-    # We try the follwing runtime paths in the
+    # We try the following runtime paths in the
     # following order:
     # 1. Standard ssl locations with all variations
     #    of lib subdirectories that we know of
@@ -6309,6 +6389,22 @@ else
    SSL_FLAGS=
 fi
 
+if test "x$v3_include" = "xyes"; then
+   echo "Using OpenSSL 3.0 is not yet recommended for production code." >> ./CONF_INFO
+   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: ******************************************************************" >&5
+$as_echo "$as_me: WARNING: ******************************************************************" >&2;}
+   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: * Using OpenSSL 3.0 is not yet recommended for production code.  *" >&5
+$as_echo "$as_me: WARNING: * Using OpenSSL 3.0 is not yet recommended for production code.  *" >&2;}
+
+   if test "x$SSL_DYNAMIC_ONLY" = "xno" ; then
+      echo "Static linking with OpenSSL 3.0 *MAY* require special configuring of the cryptolib." >> ./CONF_INFO
+      { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: * Static linking *MAY* require re-configuring the 3.0 cryptolib. *" >&5
+$as_echo "$as_me: WARNING: * Static linking *MAY* require re-configuring the 3.0 cryptolib. *" >&2;}
+   fi
+   { $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: ******************************************************************" >&5
+$as_echo "$as_me: WARNING: ******************************************************************" >&2;}
+fi
+
 if test "x$v3_include" = "xyes" && test "x$deprecated_warnings" = "xdefault_yes" && test "$CRYPTO_APP" != ""; then
    deprecated_warnings=no
 fi
@@ -6316,6 +6412,7 @@ fi
 if test "x$deprecated_warnings" = "xno"  &&  test "$CRYPTO_APP" != "" ; then
    SSL_FLAGS="$SSL_FLAGS -Wno-deprecated-declarations"
 fi
+
 
 
 

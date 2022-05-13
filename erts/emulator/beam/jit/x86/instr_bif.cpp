@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2020-2021. All Rights Reserved.
+ * Copyright Ericsson AB 2020-2022. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -478,7 +478,7 @@ void BeamGlobalAssembler::emit_call_light_bif_shared() {
                   RET);
             a.mov(RETd, x86::dword_ptr(c_p, offsetof(Process, flags)));
             a.seta(x86::cl); /* Clobber ARG1 on windows and ARG4 on Linux */
-            a.and_(RETd, imm(F_FORCE_GC));
+            a.and_(RETd, imm(F_FORCE_GC | F_DISABLE_GC));
             a.or_(x86::cl, RETb);
             a.jne(gc_after_bif_call);
 
@@ -949,7 +949,7 @@ void BeamModuleAssembler::emit_call_nif(const ArgVal &Func,
     /* The start of this function has to mimic the layout of ErtsNativeFunc. */
     a.jmp(dispatch); /* call_op */
 
-    a.align(kAlignCode, 8);
+    a.align(AlignMode::kCode, 8);
     /* ErtsNativeFunc.dfunc */
     val = Func.getValue();
     a.embed(&val, sizeof(val));

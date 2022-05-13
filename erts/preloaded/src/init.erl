@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2021. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -664,10 +664,30 @@ stop_heart(State) ->
 
 shutdown_pids(Heart,Logger,BootPid,State) ->
     Timer = shutdown_timer(State#state.flags),
+    global_prepare_shutdown(),
     catch shutdown(State#state.kernel,BootPid,Timer,State),
     kill_all_pids(Heart,Logger), % Even the shutdown timer.
     kill_all_ports(Heart), % Logger has no ports
     flush_timout(Timer).
+
+global_prepare_shutdown() ->
+    %% Inform global that we are shutting down, so it wont
+    %% send 'lost_connection' messages when connections
+    %% goes down...
+    case whereis(global_name_server) of
+        undefined ->
+            ok;
+        Pid ->
+            Mon = erlang:monitor(process, Pid),
+            Pid ! {prepare_shutdown, self(), Mon},
+            receive
+                {Mon, ok} ->
+                    erlang:demonitor(Mon, [flush]),
+                    ok;
+                {'DOWN', Mon, process, Pid, _Reason} ->
+                    ok
+            end
+    end.
 
 get_heart(Kernel) ->
     get_kernelpid(heart,Kernel).
@@ -1475,7 +1495,7 @@ run_on_load_handlers([M|Ms], Debug) ->
 	    erlang:finish_after_on_load(M, Keep),
 	    case Keep of
 		false ->
-		    Error = {on_load_function_failed,M},
+		    Error = {on_load_function_failed,M,OnLoadRes},
 		    debug(Debug, Error),
 		    exit(Error);
 		true ->

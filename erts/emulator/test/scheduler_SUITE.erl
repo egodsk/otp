@@ -1,7 +1,7 @@
 %% 
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -103,6 +103,12 @@ init_per_testcase(update_cpu_info, Config) ->
 	    {skip,"Could not find 'taskset' in path"};
 	_ ->
 	    init_per_tc(update_cpu_info, Config)
+    end;
+init_per_testcase(ThreadCase, Config) when ThreadCase =:= poll_threads;
+                                           ThreadCase =:= scheduler_threads ->
+    case erlang:system_info(schedulers_online) of
+        1 -> {skip,"Needs more than one scheduler online"};
+        _ -> init_per_tc(ThreadCase, Config)
     end;
 init_per_testcase(Case, Config) when is_list(Config) ->
     init_per_tc(Case, Config).

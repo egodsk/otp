@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2007-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -64,7 +64,10 @@ end_per_testcase(_Case, Config) ->
 %% Test that plain first argument does not
 %% destroy -home switch [OTP-8209] or interact with environments
 argument_separation(Config) when is_list(Config) ->
-    {ok,[[PName]]} = init:get_argument(progname),
+    {ok,[[FullPName]]} = init:get_argument(progname),
+     %% progname can be either "erl" or "cerl -asan", so we remove anything after the first space.
+     %% This will break if tests are run with an erlang that has a space in the path...
+    [PName | _ ] = string:lexemes(FullPName," "),
     SNameS = "erlexec_test_01",
     SName = list_to_atom(SNameS++"@"++
 			 hd(tl(string:lexemes(atom_to_list(node()),"@")))),

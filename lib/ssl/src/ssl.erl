@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1999-2021. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -347,7 +347,7 @@
                                        key_id := crypto:key_id(), 
                                        password => crypto:password()}. % exported
 -type key_pem()                   :: file:filename().
--type key_password()              :: string().
+-type key_password()              :: string() | fun(() -> string()).
 -type cipher_suites()             :: ciphers().    
 -type ciphers()                   :: [erl_cipher_suite()] |
                                      string(). % (according to old API) exported
@@ -407,6 +407,7 @@
                                 {max_fragment_length, max_fragment_length()} |
                                 {customize_hostname_check, customize_hostname_check()} |
                                 {fallback, fallback()} |
+                                {certificate_authorities, certificate_authorities()} |
                                 {session_tickets, client_session_tickets()} |
                                 {use_ticket, use_ticket()} |
                                 {early_data, client_early_data()}.
@@ -417,6 +418,7 @@
 -type client_verify_type()       :: verify_type().
 -type client_reuse_session()     :: session_id() | {session_id(), SessionData::binary()}.
 -type client_reuse_sessions()    :: boolean() | save.
+-type certificate_authorities()  :: boolean().
 -type client_cacerts()           :: [public_key:der_encoded()].
 -type client_cafile()            :: file:filename().
 -type app_level_protocol()       :: binary().
@@ -762,7 +764,7 @@ handshake(Socket, SslOptions, Timeout) when (is_integer(Timeout) andalso Timeout
       Reason :: closed | timeout | error_alert().
 %%
 %%
-%% Description: Continues the handshke possible with newly supplied options.
+%% Description: Continues the handshake possible with newly supplied options.
 %%--------------------------------------------------------------------
 handshake_continue(Socket, SSLOptions) ->
     handshake_continue(Socket, SSLOptions, infinity).
@@ -776,7 +778,7 @@ handshake_continue(Socket, SSLOptions) ->
       Reason :: closed | timeout | error_alert().
 %%
 %%
-%% Description: Continues the handshke possible with newly supplied options.
+%% Description: Continues the handshake possible with newly supplied options.
 %%--------------------------------------------------------------------
 handshake_continue(Socket, SSLOptions, Timeout) ->
     ssl_gen_statem:handshake_continue(Socket, SSLOptions, Timeout).
@@ -817,7 +819,7 @@ close(#sslsocket{pid = [TLSPid|_]},
 				       (is_integer(Timeout) andalso Timeout >= 0) or (Timeout == infinity) ->
     case ssl_gen_statem:close(TLSPid, {close, DownGrade}) of
         ok -> %% In normal close {error, closed} is regarded as ok, as it is not interesting which side
-            %% that got to do the actual close. But in the downgrade case only {ok, Port} is a sucess.
+            %% that got to do the actual close. But in the downgrade case only {ok, Port} is a success.
             {error, closed};
         Other ->
             Other
@@ -847,7 +849,7 @@ send(#sslsocket{pid = {dtls,_}}, _) ->
     {error,enotconn};  %% Emulate connection behaviour
 send(#sslsocket{pid = {ListenSocket, #config{transport_info = Info}}}, Data) ->
     Transport = element(1, Info),
-    Transport:send(ListenSocket, Data). %% {error,enotconn}
+    tls_socket:send(Transport, ListenSocket, Data). %% {error,enotconn}
 
 %%--------------------------------------------------------------------
 %%
@@ -875,7 +877,7 @@ recv(#sslsocket{pid = [Pid|_]}, Length, Timeout) when is_pid(Pid),
 recv(#sslsocket{pid = {dtls,_}}, _, _) ->
     {error,enotconn};
 recv(#sslsocket{pid = {Listen,
-		       #config{transport_info = Info}}},_,_) when is_port(Listen)->
+		       #config{transport_info = Info}}},_,_) ->
     Transport = element(1, Info),
     Transport:recv(Listen, 0). %% {error,enotconn}
 
@@ -895,11 +897,9 @@ controlling_process(#sslsocket{pid = {dtls, _}},
     ok; %% Meaningless but let it be allowed to conform with TLS 
 controlling_process(#sslsocket{pid = {Listen,
 				      #config{transport_info = {Transport,_,_,_,_}}}},
-		    NewOwner) when is_port(Listen),
-				   is_pid(NewOwner) ->
-     %% Meaningless but let it be allowed to conform with normal sockets  
+		    NewOwner) when is_pid(NewOwner) ->
+    %% Meaningless but let it be allowed to conform with normal sockets
     Transport:controlling_process(Listen, NewOwner).
-
 
 %%--------------------------------------------------------------------
 -spec connection_information(SslSocket) -> {ok, Result} | {error, reason()} when
@@ -915,11 +915,8 @@ connection_information(#sslsocket{pid = [Pid|_]}) when is_pid(Pid) ->
 	Error ->
             Error
     end;
-connection_information(#sslsocket{pid = {Listen, _}}) when is_port(Listen) -> 
-    {error, enotconn};
-connection_information(#sslsocket{pid = {dtls,_}}) ->
-    {error,enotconn}. 
-
+connection_information(#sslsocket{pid = {_Listen, #config{}}}) ->
+    {error, enotconn}.
 %%--------------------------------------------------------------------
 -spec connection_information(SslSocket, Items) -> {ok, Result} | {error, reason()} when
       SslSocket :: sslsocket(),
@@ -973,7 +970,7 @@ peercert(#sslsocket{pid = [Pid|_]}) when is_pid(Pid) ->
     end;
 peercert(#sslsocket{pid = {dtls, _}}) ->
     {error, enotconn};
-peercert(#sslsocket{pid = {Listen, _}}) when is_port(Listen) ->
+peercert(#sslsocket{pid = {_Listen, #config{}}}) ->
     {error, enotconn}.
 
 %%--------------------------------------------------------------------
@@ -1056,7 +1053,7 @@ filter_cipher_suites(Suites, Filters0) ->
       Preferred :: ciphers() | cipher_filters(),
       Suites :: ciphers().
 
-%% Description: Make <Preferred> suites become the most prefered
+%% Description: Make <Preferred> suites become the most preferred
 %%      suites that is put them at the head of the cipher suite list
 %%      and remove them from <Suites> if present. <Preferred> may be a
 %%      list of cipher suites or a list of filters in which case the
@@ -1075,7 +1072,7 @@ prepend_cipher_suites(Filters, Suites) ->
       Suites :: ciphers().
 
 %% Description: Make <Deferred> suites suites become the 
-%% least prefered suites that is put them at the end of the cipher suite list
+%% least preferred suites that is put them at the end of the cipher suite list
 %% and removed them from <Suites> if present.
 %%
 %%--------------------------------------------------------------------
@@ -1245,12 +1242,14 @@ getstat(Socket) ->
 %%
 %% Description: Get one or more statistic options for a socket.
 %%--------------------------------------------------------------------
-getstat(#sslsocket{pid = {dtls, #config{transport_info = {Transport, _, _, _, _},
-                                        dtls_handler = {Listner, _}}}},
+getstat(#sslsocket{pid = {dtls, #config{transport_info = Info,
+                                        dtls_handler = {Listener, _}}}},
         Options) when is_list(Options) ->
-    dtls_socket:getstat(Transport, Listner, Options);
-getstat(#sslsocket{pid = {Listen,  #config{transport_info = {Transport, _, _, _, _}}}},
-        Options) when is_port(Listen), is_list(Options) ->
+    Transport = element(1, Info),
+    dtls_socket:getstat(Transport, Listener, Options);
+getstat(#sslsocket{pid = {Listen,  #config{transport_info = Info}}},
+        Options) when is_list(Options) ->
+    Transport = element(1, Info),
     tls_socket:getstat(Transport, Listen, Options);
 getstat(#sslsocket{pid = [Pid|_], fd = {Transport, Socket, _, _}},
         Options) when is_pid(Pid), is_list(Options) ->
@@ -1266,12 +1265,11 @@ getstat(#sslsocket{pid = [Pid|_], fd = {Transport, Socket, _}},
 %%
 %% Description: Same as gen_tcp:shutdown/2
 %%--------------------------------------------------------------------
-shutdown(#sslsocket{pid = {Listen, #config{transport_info = Info}}},
-	 How) when is_port(Listen) ->
-    Transport = element(1, Info),
-    Transport:shutdown(Listen, How);
-shutdown(#sslsocket{pid = {dtls,_}},_) ->
+shutdown(#sslsocket{pid = {dtls, #config{}}},_) ->
     {error, enotconn};
+shutdown(#sslsocket{pid = {Listen, #config{transport_info = Info}}}, How) ->
+    Transport = element(1, Info),
+    Transport:shutdown(Listen, How);    
 shutdown(#sslsocket{pid = [Pid|_]}, How) when is_pid(Pid) ->
     ssl_gen_statem:shutdown(Pid, How).
 
@@ -1284,10 +1282,11 @@ shutdown(#sslsocket{pid = [Pid|_]}, How) when is_pid(Pid) ->
 %%
 %% Description: Same as inet:sockname/1
 %%--------------------------------------------------------------------
-sockname(#sslsocket{pid = {Listen,  #config{transport_info = {Transport,_,_,_,_}}}}) when is_port(Listen) ->
-    tls_socket:sockname(Transport, Listen);
 sockname(#sslsocket{pid = {dtls, #config{dtls_handler = {Pid, _}}}}) ->
     dtls_packet_demux:sockname(Pid);
+sockname(#sslsocket{pid = {Listen,  #config{transport_info = Info}}}) ->
+    Transport = element(1, Info),
+    tls_socket:sockname(Transport, Listen);
 sockname(#sslsocket{pid = [Pid|_], fd = {Transport, Socket,_}}) when is_pid(Pid) ->
     dtls_socket:sockname(Transport, Socket);
 sockname(#sslsocket{pid = [Pid| _], fd = {Transport, Socket,_,_}}) when is_pid(Pid) ->
@@ -1346,9 +1345,8 @@ renegotiate(#sslsocket{pid = [Pid |_]}) when is_pid(Pid) ->
     tls_dtls_connection:renegotiation(Pid);
 renegotiate(#sslsocket{pid = {dtls,_}}) ->
     {error, enotconn};
-renegotiate(#sslsocket{pid = {Listen,_}}) when is_port(Listen) ->
+renegotiate(#sslsocket{pid = {_Listen, #config{}}}) ->
     {error, enotconn}.
-
 
 %%---------------------------------------------------------------
 -spec update_keys(SslSocket, Type) -> ok | {error, reason()} when
@@ -1385,9 +1383,7 @@ update_keys(_, Type) ->
 prf(#sslsocket{pid = [Pid|_]},
     Secret, Label, Seed, WantedLength) when is_pid(Pid) ->
     tls_dtls_connection:prf(Pid, Secret, Label, Seed, WantedLength);
-prf(#sslsocket{pid = {dtls,_}}, _,_,_,_) ->
-    {error, enotconn};
-prf(#sslsocket{pid = {Listen,_}}, _,_,_,_) when is_port(Listen) ->
+prf(#sslsocket{pid = {_Listen, #config{}}}, _,_,_,_) ->
     {error, enotconn}.
 
 %%--------------------------------------------------------------------
@@ -1677,6 +1673,14 @@ handle_option(fallback = Option, Value0, OptionsMap, #{role := Role}) ->
     assert_role(client_only, Role, Option, Value0),
     Value = validate_option(Option, Value0),
     OptionsMap#{Option => Value};
+handle_option(certificate_authorities = Option, unbound, OptionsMap, #{role := Role}) ->
+    Value = default_option_role(client, false, Role),
+    OptionsMap#{Option => Value};
+handle_option(certificate_authorities = Option, Value0, #{versions := Versions} = OptionsMap, #{role := Role}) ->
+    assert_role(client_only, Role, Option, Value0),
+    assert_option_dependency(Option, versions, Versions, ['tlsv1.3']),
+    Value = validate_option(Option, Value0),
+    OptionsMap#{Option => Value};
 handle_option(cookie = Option, unbound, OptionsMap, #{role := Role}) ->
     Value = default_option_role(server, true, Role),
     OptionsMap#{Option => Value};
@@ -1736,6 +1740,12 @@ handle_option(padding_check = Option, Value0,  #{versions := Versions} = Options
     assert_option_dependency(Option, versions, Versions, ['tlsv1']),
     Value = validate_option(Option, Value0),
     OptionsMap#{Option => Value};
+handle_option(password = Option, unbound, OptionsMap, #{rules := Rules}) ->
+    Value = validate_option(Option, default_value(Option, Rules)),
+    OptionsMap#{password => Value};
+handle_option(password = Option, Value0, OptionsMap, _Env) ->
+    Value = validate_option(Option, Value0),
+    OptionsMap#{password => Value};
 handle_option(psk_identity = Option, unbound, OptionsMap, #{rules := Rules}) ->
     Value = validate_option(Option, default_value(Option, Rules)),
     OptionsMap#{Option => Value};
@@ -1954,7 +1964,7 @@ expand_options(Opts0, Rules) ->
                       {list, [{mode, list}]}], Opts0),
     Opts2 = handle_option_format(Opts1, []),
 
-    %% Remove depricated ssl_imp option
+    %% Remove deprecated ssl_imp option
     Opts = proplists:delete(ssl_imp, Opts2),
     AllOpts = maps:keys(Rules),
     SockOpts = lists:foldl(fun(Key, PropList) -> proplists:delete(Key, PropList) end,
@@ -2070,7 +2080,7 @@ validate_option(beast_mitigation, Value, _)
        Value == zero_n orelse
        Value == disabled ->
   Value;
-%% certfile must be present in some cases otherwhise it can be set
+%% certfile must be present in some cases otherwise it can be set
 %% to the empty string.
 validate_option(cacertfile, undefined, _) ->
    <<>>;
@@ -2103,6 +2113,8 @@ validate_option(cert, Value, _) when Value == undefined;
 validate_option(cert, Value, _) when Value == undefined;
                                      is_binary(Value)->
     [Value];
+validate_option(certificate_authorities, Value, _) when is_boolean(Value)->
+    Value;
 validate_option(certfile, undefined = Value, _) ->
     Value;
 validate_option(certfile, Value, _)
@@ -2282,6 +2294,9 @@ validate_option(partial_chain, Value, _)
     Value;
 validate_option(password, Value, _)
   when is_list(Value) ->
+    Value;
+validate_option(password, Value, _)
+  when is_function(Value, 0) ->
     Value;
 validate_option(protocol, Value = tls, _) ->
     Value;

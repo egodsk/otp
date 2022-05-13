@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1999-2021. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2022. All Rights Reserved.
 %% 
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -49,6 +49,9 @@
 -define(SKIP(Reason),
 	?LIB:skip(Reason, ?MODULE, ?LINE)).
 
+-define(FAIL(Reason),
+	exit({Reason, ?MODULE, ?LINE})).
+
 -define(VERIFYL(Expected, Expr),
 	fun(A,B) when list(A), list(B) ->
 		A1 = lists:sort(A),
@@ -81,6 +84,9 @@
 
 -define(MULTI_RECEIVE(Expected),
 	?VERIFY(lists:sort(Expected), lists:sort(?LIB:flush()))).
+
+-define(EXEC(F),     ?LIB:executor(F)).
+-define(EXEC(F, TO), ?LIB:executor(F, TO)).
 
 -define(TRY_TC(TCN, N, V, PRE, CASE, POST),
         ?LIB:try_tc(TCN, N, V, PRE, CASE, POST)).
@@ -125,3 +131,6 @@
 	io:format(user, "~n*** ~s *** case ~w:~w init~n~n", 
 		  [?FTS(), ?MODULE, C])).
 
+-define(UNIQUE(__PreName__),
+        list_to_atom(
+          ?F("~w_~w", [__PreName__, erlang:system_time(millisecond)]))).

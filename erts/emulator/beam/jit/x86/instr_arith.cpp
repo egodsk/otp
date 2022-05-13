@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2020-2021. All Rights Reserved.
+ * Copyright Ericsson AB 2020-2022. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1142,7 +1142,7 @@ void BeamModuleAssembler::emit_i_bsl(const ArgVal &LHS,
                                      const ArgVal &RHS,
                                      const ArgVal &Fail,
                                      const ArgVal &Dst) {
-    bool inline_shift = hasCpuFeature(x86::Features::kLZCNT);
+    bool inline_shift = hasCpuFeature(CpuFeatures::X86::kLZCNT);
     Label generic = a.newLabel(), next = a.newLabel();
 
     mov_arg(ARG2, LHS);

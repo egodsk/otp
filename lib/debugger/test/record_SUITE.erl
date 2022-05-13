@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2004-2016. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -237,7 +237,9 @@ record_test(Config) when is_list(Config) ->
     5 = record_info(size, foo),
     Foo2 = id(#foo{a=v1, b=true, c=false, d=v4}),
     2 = #foo.a,
+    #foo.a = 2,
     5 = #foo.d,
+    #foo.d = 5,
     v1 = Foo2#foo.a,
     v4 = Foo2#foo.d,
 

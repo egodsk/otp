@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2021. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2022. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -4616,7 +4616,6 @@ typedef struct {
     int full_reds;
     int full_reds_history_sum;
     int full_reds_history_change;
-    int oowc;
     int max_len;
 #if ERTS_HAVE_SCHED_UTIL_BALANCING_SUPPORT
     int sched_util;
@@ -4654,7 +4653,8 @@ do {									\
     run_queue_info[(QIX)].full_reds_history_change = (LAST_REDS);	\
 } while (0)
 
-#define ERTS_DBG_CHK_FULL_REDS_HISTORY(RQ)				\
+#ifdef DEBUG
+#  define ERTS_DBG_CHK_FULL_REDS_HISTORY(RQ)				\
 do {									\
     int sum__ = 0;							\
     int rix__;								\
@@ -4662,6 +4662,9 @@ do {									\
 	sum__ += (RQ)->full_reds_history[rix__];			\
     ASSERT(sum__ == (RQ)->full_reds_history_sum);			\
 } while (0);
+#else
+#  define ERTS_DBG_CHK_FULL_REDS_HISTORY(RQ)
+#endif
 
 #define ERTS_PRE_ALLOCED_MPATHS 8
 
@@ -4782,7 +4785,7 @@ check_balance(ErtsRunQueue *c_rq)
     ErtsMigrationPaths *new_mpaths, *old_mpaths;
     ErtsRunQueueBalance avg = {0};
     Sint64 scheds_reds, full_scheds_reds;
-    int forced, active, current_active, oowc, half_full_scheds, full_scheds,
+    int forced, active, current_active, half_full_scheds, full_scheds,
 	mmax_len, blnc_no_rqs, qix, pix, freds_hist_ix;
 #if ERTS_HAVE_SCHED_UTIL_BALANCING_SUPPORT
     int sched_util_balancing;
@@ -4873,7 +4876,6 @@ check_balance(ErtsRunQueue *c_rq)
 	run_queue_info[qix].full_reds_history_change
 	    = rq->full_reds_history[freds_hist_ix];
 
-	run_queue_info[qix].oowc = rq->out_of_work_count;
 	run_queue_info[qix].max_len = rq->max_len;
 	rq->check_balance_reds = INT_MAX;
 
@@ -4889,7 +4891,6 @@ check_balance(ErtsRunQueue *c_rq)
     half_full_scheds = 0;
     full_scheds_reds = 0;
     scheds_reds = 0;
-    oowc = 0;
     mmax_len = 0;
 
     /* Calculate availability for each priority in each run queues */
@@ -4946,7 +4947,6 @@ check_balance(ErtsRunQueue *c_rq)
 	}
 	run_queue_info[qix].reds = treds;
 	scheds_reds += treds;
-	oowc += run_queue_info[qix].oowc;
 	if (mmax_len < run_queue_info[qix].max_len)
 	    mmax_len = run_queue_info[qix].max_len;
     }
@@ -10107,6 +10107,17 @@ Process *erts_schedule(ErtsSchedulerData *esdp, Process *p, int calls)
                     if (((state & (ERTS_PSFLG_SUSPENDED
                                    | ERTS_PSFLG_ACTIVE)) != ERTS_PSFLG_ACTIVE)
                         & !(state & ERTS_PSFLG_EXITING)) {
+
+                        /* Tracing, handling signals and running sys_tasks may
+                           have created data on the process heap that should
+                           be GC:ed. */
+                        if (ERTS_IS_GC_DESIRED(p)
+                            && !(p->flags & (F_DELAY_GC|F_DISABLE_GC))) {
+                            int cost = scheduler_gc_proc(p, reds);
+                            calls += cost;
+                            reds -= cost;
+                        }
+
                         goto sched_out_proc;
                     }
 
@@ -13677,6 +13688,7 @@ enum continue_exit_phase {
     ERTS_CONTINUE_EXIT_MONITORS,
     ERTS_CONTINUE_EXIT_LT_MONITORS,
     ERTS_CONTINUE_EXIT_HANDLE_PROC_SIG,
+    ERTS_CONTINUE_EXIT_DIST_SEND,
     ERTS_CONTINUE_EXIT_DIST_LINKS,
     ERTS_CONTINUE_EXIT_DIST_MONITORS,
     ERTS_CONTINUE_EXIT_DIST_PEND_SPAWN_MONITORS,
@@ -13694,6 +13706,10 @@ struct continue_exit_state {
     void *yield_state;
     Uint32 block_rla_ref;
 };
+
+#ifdef DEBUG
+extern Export dsend_continue_trap_export;
+#endif
 
 void
 erts_continue_exit_process(Process *p)
@@ -13934,6 +13950,20 @@ restart:
         trap_state->pectxt.dist_state = NIL;
         trap_state->pectxt.yield = 0;
 
+        p->rcount = 0;
+
+        if (p->flags & F_FRAGMENTED_SEND) {
+            /* The process was re-scheduled while doing a fragmented
+               distributed send (possibly because it was suspended).
+               We need to finish doing that send as otherwise incomplete
+               fragmented messages will be sent to other nodes potentially
+               causing memory leaks.
+            */
+            ASSERT(p->current == &dsend_continue_trap_export.info.mfa);
+            /* arg_reg[0] is the argument used in dsend_continue_trap_export */
+            trap_state->pectxt.dist_state = p->arg_reg[0];
+        }
+
         erts_proc_lock(p, ERTS_PROC_LOCK_MSGQ);
 
         erts_proc_sig_fetch(p);
@@ -13995,11 +14025,12 @@ restart:
 
         reds -= r;
 
-        trap_state->phase = ERTS_CONTINUE_EXIT_DIST_LINKS;
+        trap_state->phase = ERTS_CONTINUE_EXIT_DIST_SEND;
     }
-    case ERTS_CONTINUE_EXIT_DIST_LINKS: {
+    case ERTS_CONTINUE_EXIT_DIST_SEND: {
 
-        continue_dist_send:
+    continue_dist_send:
+        ASSERT(p->rcount == 0);
         if (is_not_nil(trap_state->pectxt.dist_state)) {
             Binary* bin = erts_magic_ref2bin(trap_state->pectxt.dist_state);
             ErtsDSigSendContext* ctx = (ErtsDSigSendContext*) ERTS_MAGIC_BIN_DATA(bin);
@@ -14032,6 +14063,13 @@ restart:
             goto restart;
         }
 
+        trap_state->phase = ERTS_CONTINUE_EXIT_DIST_LINKS;
+    }
+    case ERTS_CONTINUE_EXIT_DIST_LINKS: {
+
+        if (is_not_nil(trap_state->pectxt.dist_state))
+            goto continue_dist_send;
+
         reds = erts_link_tree_foreach_delete_yielding(
             &trap_state->pectxt.dist_links,
             erts_proc_exit_handle_dist_link,
@@ -14040,6 +14078,7 @@ restart:
             reds);
         if (reds <= 0 || trap_state->pectxt.yield)
             goto yield;
+
         trap_state->phase = ERTS_CONTINUE_EXIT_DIST_MONITORS;
     }
     case ERTS_CONTINUE_EXIT_DIST_MONITORS: {

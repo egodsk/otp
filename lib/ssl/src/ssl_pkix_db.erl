@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2007-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -99,7 +99,7 @@ remove(Dbs) ->
 				 undefined | {ok, public_key:combined_cert()}.
 
 %%
-%% Description: Retrives the trusted certificate identified by 
+%% Description: Retrieves the trusted certificate identified by 
 %% <SerialNumber, Issuer>. Ref is used as it is specified  
 %% for each connection which certificates are trusted.
 %%--------------------------------------------------------------------
@@ -193,7 +193,7 @@ decode_pem_file(File) ->
 %%--------------------------------------------------------------------
 -spec remove_trusted_certs(reference(), db_handle()) -> ok.
 %%
-%% Description: Removes all trusted certificates refernced by <Ref>.
+%% Description: Removes all trusted certificates referenced by <Ref>.
 %%--------------------------------------------------------------------
 remove_trusted_certs(Ref, CertsDb) ->
     remove_certs(Ref, CertsDb).

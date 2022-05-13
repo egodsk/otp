@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 2004-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2004-2022. All Rights Reserved.
 %% 
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -590,7 +590,7 @@ loop(#state{transports = Transports,
 		    loop(S)
 	    end;
 
-	{udp_error, Socket, Error} when is_port(Socket) ->
+	{udp_error, Socket, Error} ->
 	    ?vinfo("got udp-error on ~p: ~w", [Socket, Error]),
 	    case lists:keyfind(Socket, #transport.socket, Transports) of
 		#transport{socket = Socket} = Transport ->

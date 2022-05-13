@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2010-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2010-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -232,7 +232,7 @@ client_unique_session(Config) when is_list(Config) ->
     ssl_test_lib:close(LastClient).
 		
 session_cleanup() ->
-    [{doc, "Test that sessions are cleand up eventually, so that the session table "
+    [{doc, "Test that sessions are cleaned up eventually, so that the session table "
      "does not grow and grow ..."}].
 session_cleanup(Config) when is_list(Config) ->
     process_flag(trap_exit, true),

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2020. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -244,12 +244,12 @@ validate_extensions(OtpCert, ValidationState, UserState, VerifyFun) ->
 	    {ValidationState, UserState}
     end.
 %%--------------------------------------------------------------------
--spec normalize_general_name({rdnSequence, term()}) -> {rdnSequence, term()}. 
+-spec normalize_general_name({rdnSequence, term()}| binary()) -> {rdnSequence, term()}. 
 %%
 %% Description: Normalizes a general name so that it can be easily
 %%              compared to another genral name. 
 %%--------------------------------------------------------------------	
-normalize_general_name({rdnSequence, Issuer}) ->
+normalize_general_name({rdnSequence, Issuer}) ->    
     NormIssuer = do_normalize_general_name(Issuer),
     {rdnSequence, NormIssuer}.
 

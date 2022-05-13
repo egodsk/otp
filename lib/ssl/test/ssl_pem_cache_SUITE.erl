@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2015-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2015-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -139,7 +139,7 @@ pem_cleanup(Config)when is_list(Config) ->
     false = Size == Size1.
 
 clear_pem_cache() ->
-    [{doc,"Test that internal reference tabel is cleaned properly even when "
+    [{doc,"Test that internal reference table is cleaned properly even when "
      " the PEM cache is cleared" }].
 clear_pem_cache(Config) when is_list(Config) -> 
     {status, _, _, StatusInfo} = sys:get_status(whereis(ssl_manager)),
@@ -255,7 +255,7 @@ new_root_pem(Config)when is_list(Config) ->
     %% Overwrite old config files
     _ = x509_test:gen_pem_config_files(DerConfig1, ClientBase, SeverBase),
 
-    %% Make sure chache is cleared 
+    %% Make sure cache is cleared 
     ssl:clear_pem_cache(),
     
     Server1 =

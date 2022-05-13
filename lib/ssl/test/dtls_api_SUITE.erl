@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2019-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2019-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -372,17 +372,17 @@ client_restarts(Config) ->
     ReConnect =  %% Whitebox re-connect test
         fun({sslsocket, {gen_udp,_,dtls_gen_connection}, [Pid]} = Socket, ssl) ->
                 ct:log("~p Client Socket: ~p ~n", [self(), Socket]),
-                {ok, {{Adress,CPort},UDPSocket}=IntSocket} = gen_statem:call(Pid, {downgrade, self()}),
-                true = is_port(UDPSocket),
+                {ok, {{Address,CPort},UDPSocket}=IntSocket} = gen_statem:call(Pid, {downgrade, self()}),
+
                 ct:log("Info: ~p~n", [inet:info(UDPSocket)]),
 
                 {ok, #config{transport_info = CbInfo, connection_cb = ConnectionCb,
-                             ssl = SslOpts0}} = ssl:handle_options(ClientOpts, client, Adress),
+                             ssl = SslOpts0}} = ssl:handle_options(ClientOpts, client, Address),
                 SslOpts = {SslOpts0, #socket_options{}, undefined},
 
                 ct:sleep(250),
                 ct:log("Client second connect: ~p ~p~n", [Socket, CbInfo]),
-                Res = ssl_gen_statem:connect(ConnectionCb, Adress, CPort, IntSocket, SslOpts, self(), CbInfo, infinity),
+                Res = ssl_gen_statem:connect(ConnectionCb, Address, CPort, IntSocket, SslOpts, self(), CbInfo, infinity),
                 {Res, Pid}
         end,
 

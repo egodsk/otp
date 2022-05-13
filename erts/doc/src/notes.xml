@@ -4,7 +4,7 @@
 <chapter>
   <header>
     <copyright>
-      <year>2004</year><year>2021</year>
+      <year>2004</year><year>2022</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -30,6 +30,230 @@
     <file>notes.xml</file>
   </header>
   <p>This document describes the changes made to the ERTS application.</p>
+
+<section><title>Erts 12.3.2</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Let EPMD tolerate failure when binding to IPv4/IPv6
+	    loopback intefaces in addition to user-supplied addresses
+	    via <c>ERL_EPMD_ADDRESS</c> or the <c>-address</c>
+	    option. This can happen, for example, if the host system
+	    has ipv6 disabled via the disable_ipv6 sysctl.</p>
+          <p>
+	    Own Id: OTP-17970 Aux Id: PR-5762 </p>
+        </item>
+        <item>
+	    <p>Fixed a rare bug in <c>binary_to_term/1</c>,
+	    <c>enif_make_map_from_arrays</c>,
+	    <c>erl_drv_send_term</c>, and Erlang distribution that
+	    could crash the emulator.</p>
+          <p>
+	    Own Id: OTP-18027</p>
+        </item>
+        <item>
+	    <p>Fixed a rare race in <c>persistent_term:get/1,2</c>
+	    that could cause it to return the value of another
+	    key.</p>
+          <p>
+	    Own Id: OTP-18065 Aux Id: GH-5908 </p>
+        </item>
+        <item>
+          <p>
+	    Fix bug where the process message queue was left in an
+	    inconsistent state when changing from on_heap to off_heap
+	    message queue data causing the GC to segfault.</p>
+          <p>
+	    Own Id: OTP-18075 Aux Id: PR-5927 </p>
+        </item>
+        <item>
+          <p>
+	    Fix functions that convert universal to localtime (such
+	    as erlang:localtime/0 and
+	    erlang:universaltime_to_localtime/1) to fetch the correct
+	    localtime if it is changed after the start of the VM.</p>
+          <p>
+	    Own Id: OTP-18076 Aux Id: ERIERL-802 PR-5905 </p>
+        </item>
+        <item>
+          <p>
+	    Fix memory leak when a process doing a distributed
+	    fragmented send is sent an exit signal. Before this fix
+	    the receiving node would be left with an incomplete
+	    message that would remain until the nodes were
+	    disconnected. The bug has existed since Erlang/OTP 21.</p>
+          <p>
+	    Own Id: OTP-18077 Aux Id: GH-5876 PR-5892 </p>
+        </item>
+        <item>
+          <p>
+	    Corrected the behaviour of the shutdown function when
+	    using with the inet_backend = socket. It was not
+	    sufficiently compatible with the "old" gen_tcp.</p>
+          <p>
+	    Own Id: OTP-18080 Aux Id: GH-5930 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Erts 12.3.1</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+	    <p> <c>erlang:open_port({spawn, _},_)</c> has been fixed
+	    on Windows to handle whitespace characters in the path
+	    correctly. </p><p> This could, for example, cause
+	    execution of the resolver helper program
+	    <c>inet_gethost</c> to fail and instead possibly execute
+	    a different program. </p>
+          <p>
+	    Own Id: OTP-17978 Aux Id: OTP-17958 </p>
+        </item>
+        <item>
+          <p>
+	    Fix race condition when creating crash dump that could
+	    cause multiple threads to race when writing the initial
+	    information in a crash dump.</p>
+          <p>
+	    The race condition was introduced in erts-12.2
+	    (Erlang/OTP 24.2).</p>
+          <p>
+	    Own Id: OTP-17993 Aux Id: PR-5806 </p>
+        </item>
+        <item>
+          <p>
+	    Fix Erlang monotonic time on MacOS. Previously used OS
+	    monotonic time primitive on MacOS is buggy and will not
+	    be used anymore. It has been replaced with usage of
+	    another OS monotonic time primitive that does not appear
+	    to be buggy.</p>
+          <p>
+	    Own Id: OTP-17998 Aux Id: PR-5825, GH-5554 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Erts 12.3</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+	    <p>Fixed a bug in the x86 JIT that might cause floating
+	    point instructions to wrongly throw an exception.</p>
+          <p>
+	    Own Id: OTP-17822</p>
+        </item>
+        <item>
+          <p>
+	    Preserve correct <c>nodedown_reason</c> if supervised
+	    distribution controller processes exit with <c>{shutdown,
+	    Reason}</c>.</p>
+          <p>
+	    Own Id: OTP-17838 Aux Id: PR-5748 </p>
+        </item>
+        <item>
+          <p>
+	    Handling of <c>send_timeout</c> for <c>gen_tcp</c> has
+	    been corrected so that the timeout is honored also when
+	    sending 0 bytes.</p>
+          <p>
+	    Own Id: OTP-17840</p>
+        </item>
+        <item>
+	    <p> By default <c>global</c> does <i>not</i> take any
+	    actions to restore a fully connected network when
+	    connections are lost due to network issues. This is
+	    problematic for all applications expecting a fully
+	    connected network to be provided, such as for example
+	    <c>mnesia</c>, but also for <c>global</c> itself. A
+	    network of overlapping partitions might cause the
+	    internal state of <c>global</c> to become inconsistent.
+	    Such an inconsistency can remain even after such
+	    partitions have been brought together to form a fully
+	    connected network again. The effect on other applications
+	    that expects that a fully connected network is maintained
+	    may vary, but they might misbehave in very subtle hard to
+	    detect ways during such a partitioning. </p> <p> In order
+	    to prevent such issues, we have introduced a <i>prevent
+	    overlapping partitions</i> fix which can be enabled using
+	    the <seeapp
+	    marker="kernel:kernel_app#prevent_overlapping_partitions"><c>prevent_overlapping_partitions</c></seeapp>
+	    <c>kernel(6)</c> parameter. When this fix has been
+	    enabled, <c>global</c> will actively disconnect from
+	    nodes that reports that they have lost connections to
+	    other nodes. This will cause fully connected partitions
+	    to form instead of leaving the network in a state with
+	    overlapping partitions. Note that this fix <i>has</i> to
+	    be enabled on <i>all</i> nodes in the network in order to
+	    work properly. Since this quite substantially changes the
+	    behavior, this fix is currently disabled by default.
+	    Since you might get hard to detect issues without this
+	    fix you are, however, <i>strongly</i> advised to enable
+	    this fix in order to avoid issues such as the ones
+	    described above. As of OTP 25 this fix will become
+	    enabled by default. </p>
+          <p>
+	    Own Id: OTP-17843 Aux Id: ERIERL-732, PR-5611 </p>
+        </item>
+        <item>
+	    <p>Corrected the type specification of
+	    <c>erlang:seq_trace/2</c>.</p>
+          <p>
+	    Own Id: OTP-17900 Aux Id: GH-5667 </p>
+        </item>
+        <item>
+          <p>
+	    Fix memory leak when tracing on running on a process that
+	    only handle system tasks or non-message signals (for
+	    example process_info requests).</p>
+          <p>
+	    Own Id: OTP-17904 Aux Id: ERIERL-757 </p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Add support for using socket:sockaddr_in() and
+	    socket:sockaddr_in6() when using gen_sctp, gen_tcp and
+	    gen_udp. This will make it possible to use Link Local
+	    IPv6 addresses.</p>
+          <p>
+	    Own Id: OTP-17455 Aux Id: GH-4852 </p>
+        </item>
+        <item>
+          <p>
+	    Show <c>on_load</c> failure reasons in embedded mode.</p>
+          <p>
+	    Own Id: OTP-17718 Aux Id: PR-5199 </p>
+        </item>
+        <item>
+          <p>
+	    Compile date saved in the Erlang VM executable has been
+	    removed.</p>
+          <p>
+	    Own Id: OTP-17891 Aux Id: PR-5589 </p>
+        </item>
+        <item>
+          <p>
+	    Improve documentation for the dynamic node name feature.</p>
+          <p>
+	    Own Id: OTP-17918</p>
+        </item>
+      </list>
+    </section>
+
+</section>
 
 <section><title>Erts 12.2.1</title>
 
@@ -1393,6 +1617,70 @@
 	    increments of 256kb to 16kb.</p>
           <p>
 	    Own Id: OTP-17368</p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Erts 11.2.2.10</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    Fix GC emulator crash when <c>spawn_request</c> was used
+	    when message tracing was enabled.</p>
+          <p>
+	    Own Id: OTP-17871 Aux Id: PR-5612 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Erts 11.2.2.9</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+	    <p>Fixed a memory leak in <c>file:read_file_info/2</c>
+	    and <c>file:read_file/1</c> on Windows.</p>
+          <p>
+	    Own Id: OTP-17827 Aux Id: GH-5527 </p>
+        </item>
+      </list>
+    </section>
+
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Responsiveness of processes executing on <c>normal</c> or
+	    <c>low</c> priority could suffer due to code purging or
+	    literal area removal on systems with a huge amount of
+	    processes. This since during these operations all
+	    processes on the system were scheduled for execution at
+	    once.</p>
+          <p>
+	    This problem has been fixed by introducing a limit on
+	    outstanding purge and copy literal requests in the
+	    system. By default this limit is set to twice the amount
+	    of schedulers on the system. This will ensure that
+	    schedulers will have enough work scheduled to perform
+	    these operations as quickly as possible at the same time
+	    as other work will be interleaved to a much higher
+	    degree. Performance of these operations will however be
+	    somewhat degraded due to the overhead of enforcing this
+	    limit compared to when using a very large limit.</p>
+          <p>
+	    This limit can be set by passing the <c>+zosrl</c>
+	    command line argument to <c>erl</c>, or by calling
+	    <c>erlang:system_flag(outstanding_system_requests_limit,
+	    NewLimit)</c>.</p>
+          <p>
+	    Own Id: OTP-17796 Aux Id: ERIERL-729, PR-5473 </p>
         </item>
       </list>
     </section>
@@ -3124,6 +3412,42 @@
 	    set before Erlang can be started.</p>
           <p>
 	    Own Id: OTP-16635 Aux Id: ERL-476 PR-2390 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Erts 10.7.2.16</title>
+
+    <section><title>Improvements and New Features</title>
+      <list>
+        <item>
+          <p>
+	    Responsiveness of processes executing on <c>normal</c> or
+	    <c>low</c> priority could suffer due to code purging or
+	    literal area removal on systems with a huge amount of
+	    processes. This since during these operations all
+	    processes on the system were scheduled for execution at
+	    once.</p>
+          <p>
+	    This problem has been fixed by introducing a limit on
+	    outstanding purge and copy literal requests in the
+	    system. By default this limit is set to twice the amount
+	    of schedulers on the system. This will ensure that
+	    schedulers will have enough work scheduled to perform
+	    these operations as quickly as possible at the same time
+	    as other work will be interleaved to a much higher
+	    degree. Performance of these operations will however be
+	    somewhat degraded due to the overhead of enforcing this
+	    limit compared to when using a very large limit.</p>
+          <p>
+	    This limit can be set by passing the <c>+zosrl</c>
+	    command line argument to <c>erl</c>, or by calling
+	    <c>erlang:system_flag(outstanding_system_requests_limit,
+	    NewLimit)</c>.</p>
+          <p>
+	    Own Id: OTP-17796 Aux Id: ERIERL-729, PR-5473 </p>
         </item>
       </list>
     </section>

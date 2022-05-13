@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2008-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2008-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -110,6 +110,7 @@ check_diff(Diff) ->
 
 copyright(<<_, _, "%% Copyright", _/binary>>) -> ok;
 copyright(<<_, _, " * Copyright", _/binary>>) -> ok;
+copyright(<<_, _, "    <year>", _/binary>>) -> ok;
 copyright(_) -> throw(diff).
 
 w(Str) ->

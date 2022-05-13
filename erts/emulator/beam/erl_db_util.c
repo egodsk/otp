@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1998-2021. All Rights Reserved.
+ * Copyright Ericsson AB 1998-2022. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -4168,7 +4168,6 @@ static DMCRet dmc_all_bindings(DMCContext *context,
 			       int *constant)
 {
     int i;
-    int heap_used = 0;
 
     DMC_PUSH(*text, matchPushC);
     DMC_PUSH(*text, NIL);
@@ -4176,7 +4175,6 @@ static DMCRet dmc_all_bindings(DMCContext *context,
 	if (heap->vars[i].is_bound) {
 	    dmc_add_pushv_variant(context, heap, text, i);
 	    DMC_PUSH(*text, matchConsB);
-	    heap_used += 2;
 	}
     }
     ++context->stack_used;

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2020-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2020-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -121,6 +121,7 @@ initialize_tls_sender(#state{static_env = #static_env{
                              socket_options = SockOpts, 
                              ssl_options = #{renegotiate_at := RenegotiateAt,
                                              key_update_at := KeyUpdateAt,
+                                             erl_dist := ErlDist,
                                              log_level := LogLevel},
                              connection_states = #{current_write := ConnectionWriteState},
                              protocol_specific = #{sender := Sender}}) ->
@@ -128,6 +129,7 @@ initialize_tls_sender(#state{static_env = #static_env{
              role => Role,
              socket => Socket,
              socket_options => SockOpts,
+             erl_dist => ErlDist, 
              trackers => Trackers,
              transport_cb => Transport,
              negotiated_version => Version,
@@ -296,7 +298,7 @@ handle_info({CloseTag, Socket}, StateName,
         false ->
             %% As invalidate_sessions here causes performance issues,
             %% we will conform to the widespread implementation
-            %% practice and go aginst the spec
+            %% practice and go against the spec
             %% case Version of
             %%     {3, N} when N >= 1 ->
             %%         ok;
@@ -347,7 +349,24 @@ next_event(StateName,  #alert{} = Alert, State, Actions) ->
     {next_state, StateName, State, [{next_event, internal, Alert} | Actions]}.
 
 %%% TLS record protocol level application data messages 
-handle_protocol_record(#ssl_tls{type = ?APPLICATION_DATA, fragment = Data}, StateName, 
+handle_protocol_record(#ssl_tls{type = ?APPLICATION_DATA}, StateName,
+                       #state{static_env = #static_env{role = server},
+                              handshake_env = #handshake_env{renegotiation = {false, first}}
+                             } = State) when StateName == initial_hello;
+                                             StateName == hello;
+                                             StateName == certify;
+                                             StateName == abbreviated;
+                                             StateName == cipher
+                                             ->
+    %% Application data can not be sent before initial handshake pre TLS-1.3.
+    Alert = ?ALERT_REC(?FATAL, ?UNEXPECTED_MESSAGE, application_data_before_initial_handshake),
+    ssl_gen_statem:handle_own_alert(Alert, StateName, State);
+handle_protocol_record(#ssl_tls{type = ?APPLICATION_DATA}, start = StateName,
+                       #state{static_env = #static_env{role = server}
+                             } = State) ->
+    Alert = ?ALERT_REC(?FATAL, ?DECODE_ERROR, invalid_tls_13_message),
+    ssl_gen_statem:handle_own_alert(Alert, StateName, State);
+handle_protocol_record(#ssl_tls{type = ?APPLICATION_DATA, fragment = Data}, StateName,
                        #state{start_or_recv_from = From,
                               socket_options = #socket_options{active = false}} = State0) when From =/= undefined ->
     case ssl_gen_statem:read_application_data(Data, State0) of
@@ -379,7 +398,7 @@ handle_protocol_record(#ssl_tls{type = ?HANDSHAKE, fragment = Data},
     try
 	%% Calculate the effective version that should be used when decoding an incoming handshake
 	%% message.
-	EffectiveVersion = effective_version(Version, Options, Role),
+	EffectiveVersion = effective_version(Version, Options, Role, StateName),
 	{Packets, Buf} = tls_handshake:get_tls_handshake(EffectiveVersion,Data,Buf0, Options),
 	State =
 	    State0#state{protocol_buffers =
@@ -494,7 +513,7 @@ close({shutdown, own_alert}, Socket, Transport = gen_tcp, ConnectionStates) ->
     %% data sent to the tcp port is really delivered to the
     %% peer application before tcp port is closed so that the peer will
     %% get the correct TLS alert message and not only a transport close.
-    %% Will return when other side has closed or after timout millisec
+    %% Will return when other side has closed or after timeout millisec
     %% e.g. we do not want to hang if something goes wrong
     %% with the network but we want to maximise the odds that
     %% peer application gets all data sent on the tcp connection.
@@ -606,7 +625,7 @@ flow_ctrl(#state{user_data_buffer = {_,Size,_},
                  socket_options = #socket_options{active = false},
                  bytes_to_read = undefined} = State)  when Size =/= 0 ->
     %% Passive mode wait for new recv request or socket activation
-    %% that is preserv some tcp back pressure by waiting to activate
+    %% that is preserve some tcp back pressure by waiting to activate
     %% socket
     {no_record, State};
 %%%%%%%%%% A packet mode is set and socket is passive %%%%%%%%%%
@@ -684,7 +703,7 @@ next_record(#state{connection_env = #connection_env{negotiated_version = {3,4} =
                     next_record(State, CipherTexts, ConnectionStates, Check, Acc)
             end;
         {Record, ConnectionStates} when Acc =:= [] ->
-            %% Singelton non-?APPLICATION_DATA record - deliver
+            %% Singleton non-?APPLICATION_DATA record - deliver
             next_record_done(State, CipherTexts, ConnectionStates, Record);
         {_Record, _ConnectionStates_to_forget} ->
             %% Not ?APPLICATION_DATA but we have accumulated fragments
@@ -721,7 +740,7 @@ next_record(#state{connection_env = #connection_env{negotiated_version = Version
             [CT|CipherTexts], ConnectionStates0, Check, []) ->
     case tls_record:decode_cipher_text(Version, CT, ConnectionStates0, Check) of      
         {Record, ConnectionStates} ->
-            %% Singelton non-?APPLICATION_DATA record - deliver
+            %% Singleton non-?APPLICATION_DATA record - deliver
             next_record_done(State, CipherTexts, ConnectionStates, Record);
         #alert{} = Alert ->
             Alert
@@ -732,19 +751,24 @@ next_record_done(#state{protocol_buffers = Buffers} = State, CipherTexts, Connec
      State#state{protocol_buffers = Buffers#protocol_buffers{tls_cipher_texts = CipherTexts},
                  connection_states = ConnectionStates}}.
 
-%% Special version handling for TLS 1.3 clients:
-%% In the shared state 'init' negotiated_version is set to requested version and
-%% that is expected by the legacy part of the state machine. However, in order to
-%% be able to process new TLS 1.3 extensions, the effective version shall be set
-%% {3,4}.
-%% When highest supported version is {3,4} the negotiated version is set to {3,3}.
-effective_version({3,3} , #{versions := [Version|_]}, client) when Version >= {3,4} ->
+
+%% Pre TLS-1.3, on the client side, the connection state variable `negotiated_version` will initially be
+%% the requested version. On the server side the same variable is initially undefined.
+%% When the client can support TLS-1.3 and one or more prior versions and we are waiting
+%% for the server hello (with or without a RetryRequest, that is in state hello or in state wait_sh),
+%% the "initial requested version" kept in the connection state variable `negotiated_version`
+%% (before the versions is actually negotiated) will always be the value of TLS-1.2 (which is a legacy
+%% field in TLS-1.3 client hello). The versions are instead negotiated with an hello extension. When
+%% decoding the server_hello messages we want to go through TLS-1.3 decode functions to be able
+%% to handle TLS-1.3 extensions if TLS-1.3 will be the negotiated version.
+effective_version({3,3} , #{versions := [{3,4} = Version |_]}, client, StateName) when StateName == hello;
+                                                                                       StateName == wait_sh ->
     Version;
-%% Use highest supported version during startup (TLS server, all versions).
-effective_version(undefined, #{versions := [Version|_]}, _) ->
+%% When the `negotiated_version` variable is not yet set use the highest supported version.
+effective_version(undefined, #{versions := [Version|_]}, _, _) ->
     Version;
-%% Use negotiated version in all other cases.
-effective_version(Version, _, _) ->
+%% In all other cases use the version saved in the connection state variable `negotiated_version`
+effective_version(Version, _, _, _) ->
     Version.
 
 assert_buffer_sanity(<<?BYTE(_Type), ?UINT24(Length), Rest/binary>>, 

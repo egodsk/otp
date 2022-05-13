@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2020-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2020-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -41,8 +41,8 @@
 start_link() ->
     supervisor:start_link({local, ?MODULE}, ?MODULE, []).
 
-start_child(Listner) ->
-    supervisor:start_child(?MODULE, [Listner | [ssl_config:pre_1_3_session_opts(server)]]).
+start_child(Listener) ->
+    supervisor:start_child(?MODULE, [Listener | [ssl_config:pre_1_3_session_opts(server)]]).
 
 %%%=========================================================================
 %%%  Supervisor callback

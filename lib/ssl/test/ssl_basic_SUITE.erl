@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2007-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -140,14 +140,7 @@ init_per_suite(Config0) ->
     try crypto:start() of
 	ok ->
 	    ssl_test_lib:clean_start(),
-	    %% make rsa certs using openssl
-	    {ok, _} = make_certs:all(proplists:get_value(data_dir, Config0),
-				     proplists:get_value(priv_dir, Config0)),
-	    Config1 = ssl_test_lib:make_dsa_cert(Config0),
-	    Config2 = ssl_test_lib:make_ecdsa_cert(Config1),
-            Config3 = ssl_test_lib:make_rsa_cert(Config2),
-	    Config = ssl_test_lib:make_ecdh_rsa_cert(Config3),
-	    ssl_test_lib:cert_options(Config)
+            ssl_test_lib:make_rsa_cert(Config0)
     catch _:_ ->
 	    {skip, "Crypto did not start"}
     end.
@@ -196,8 +189,8 @@ version_option(Config) when is_list(Config) ->
 connect_twice() ->
     [{doc,""}].
 connect_twice(Config) when is_list(Config) ->
-    ClientOpts = ssl_test_lib:ssl_options(client_opts, Config),
-    ServerOpts = ssl_test_lib:ssl_options(server_opts, Config),
+    ClientOpts = ssl_test_lib:ssl_options(client_rsa_verify_opts, Config),
+    ServerOpts = ssl_test_lib:ssl_options(server_rsa_verify_opts, Config),
 
     {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
 
@@ -255,8 +248,8 @@ fallback() ->
     [{doc, "Test TLS_FALLBACK_SCSV downgrade prevention"}].
 
 fallback(Config) when is_list(Config) ->
-    ClientOpts = ssl_test_lib:ssl_options(client_opts, Config),
-    ServerOpts = ssl_test_lib:ssl_options(server_opts, Config),
+    ClientOpts = ssl_test_lib:ssl_options(client_rsa_verify_opts, Config),
+    ServerOpts = ssl_test_lib:ssl_options(server_rsa_verify_opts, Config),
     {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
     
     Server = 
@@ -277,7 +270,7 @@ fallback(Config) when is_list(Config) ->
    
 %%--------------------------------------------------------------------
 cipher_format() ->
-    [{doc, "Test that cipher conversion from maps | tuples | stings to binarys works"}].
+    [{doc, "Test that cipher conversion from maps | tuples | strings to binarys works"}].
 cipher_format(Config) when is_list(Config) ->
     {ok, Socket0} = ssl:listen(0, [{ciphers, ssl:cipher_suites(default, 'tlsv1.2')}]),
     ssl:close(Socket0).
@@ -333,8 +326,8 @@ unordered_protocol_versions_server() ->
       " when it is not first in the versions list."}].
 
 unordered_protocol_versions_server(Config) when is_list(Config) -> 
-    ClientOpts = ssl_test_lib:ssl_options(client_opts, Config),
-    ServerOpts = ssl_test_lib:ssl_options(server_opts, Config),  
+    ClientOpts = ssl_test_lib:ssl_options(client_rsa_verify_opts, Config),
+    ServerOpts = ssl_test_lib:ssl_options(server_rsa_verify_opts, Config),  
 
     {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
     Server = ssl_test_lib:start_server([{node, ServerNode}, {port, 0}, 
@@ -358,8 +351,8 @@ unordered_protocol_versions_client() ->
       " when it is not first in the versions list."}].
 
 unordered_protocol_versions_client(Config) when is_list(Config) -> 
-    ClientOpts = ssl_test_lib:ssl_options(client_opts, Config),
-    ServerOpts = ssl_test_lib:ssl_options(server_opts, Config),  
+    ClientOpts = ssl_test_lib:ssl_options(client_rsa_verify_opts, Config),
+    ServerOpts = ssl_test_lib:ssl_options(server_rsa_verify_opts, Config),  
 
     {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
     Server = ssl_test_lib:start_server([{node, ServerNode}, {port, 0}, 
@@ -381,10 +374,10 @@ connect_dist() ->
     [{doc,"Test a simple connect as is used by distribution"}].
 
 connect_dist(Config) when is_list(Config) -> 
-    ClientOpts0 = ssl_test_lib:ssl_options(client_kc_opts, Config),
-    ClientOpts = [{ssl_imp, new},{active, false}, {packet,4}|ClientOpts0],
-    ServerOpts0 = ssl_test_lib:ssl_options(server_kc_opts, Config),
-    ServerOpts = [{ssl_imp, new},{active, false}, {packet,4}|ServerOpts0],
+    ClientOpts0 = ssl_test_lib:ssl_options(client_rsa_opts, Config),
+    ClientOpts = [{active, false}, {packet,4}|ClientOpts0],
+    ServerOpts0 = ssl_test_lib:ssl_options(server_rsa_opts, Config),
+    ServerOpts = [{active, false}, {packet,4}|ServerOpts0],
 
     {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
 
@@ -420,8 +413,8 @@ eccs(Config) when is_list(Config) ->
 tls_versions_option() ->
     [{doc,"Test API versions option to connect/listen."}].
 tls_versions_option(Config) when is_list(Config) ->
-    ClientOpts = ssl_test_lib:ssl_options(client_opts, Config),
-    ServerOpts = ssl_test_lib:ssl_options(server_opts, Config),
+    ClientOpts = ssl_test_lib:ssl_options(client_rsa_verify_opts, Config),
+    ServerOpts = ssl_test_lib:ssl_options(server_rsa_verify_opts, Config),
 
     Supported = proplists:get_value(supported, ssl:versions()),
     Available = proplists:get_value(available, ssl:versions()),
@@ -732,7 +725,7 @@ incompleat_chain_length(Config) when is_list(Config)->
     VerifyFun = {fun(_,{bad_cert, unknown_ca}, UserState) -> 
                          %% accept this error to provoke the 
                          %% building of an shorter incomplete chain
-                         %% than the one recived  
+                         %% than the one received  
                          {valid, UserState};
                     (_,{extension, _} = Extension, #{ext := N} = UserState) ->
                          ct:pal("~p", [Extension]),
@@ -794,14 +787,14 @@ connect_dist_c(S) ->
 
 dummy(_Socket) ->
     %% Should not happen as the ssl connection will not be established
-    %% due to fatal handshake failiure
+    %% due to fatal handshake failure
     exit(kill).
 %%--------------------------------------------------------------------
 %% Internal functions ------------------------------------------------
 %%--------------------------------------------------------------------
 version_option_test(Config, Version) ->
-    ClientOpts = ssl_test_lib:ssl_options(client_opts, Config),
-    ServerOpts = ssl_test_lib:ssl_options(server_opts, Config),
+    ClientOpts = ssl_test_lib:ssl_options(client_rsa_verify_opts, Config),
+    ServerOpts = ssl_test_lib:ssl_options(server_rsa_verify_opts, Config),
     {ClientNode, ServerNode, Hostname} = ssl_test_lib:run_where(Config),
     Server = 
 	ssl_test_lib:start_server([{node, ServerNode}, {port, 0}, 

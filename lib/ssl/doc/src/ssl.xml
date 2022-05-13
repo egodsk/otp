@@ -4,7 +4,7 @@
 <erlref>
   <header>
     <copyright>
-      <year>1999</year><year>2021</year>
+      <year>1999</year><year>2022</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -115,7 +115,7 @@
 	<c>inet:peername/1</c>, <c>inet:sockname/1</c>, and
 	<c>inet:port/1</c>.  The callback <c>gen_tcp</c> is treated
 	specially and calls <c>inet</c> directly. For DTLS this
-	feature must be considered exprimental.
+	feature must be considered experimental.
 	</p>
       </desc>
     </datatype>
@@ -308,9 +308,9 @@
     <datatype>
       <name name="cert"/>
       <desc>
-	<p>The DER-encoded users certificate. Note that the cert option may also
-	be a list of DER-encoded certificates where the first one is the users
-	certificate and the rest of the certificates constitutes the
+	<p>The DER-encoded user certificate. Note that the cert option may also
+	be a list of DER-encoded certificates where the first one is the user
+	certificate, and the rest of the certificates constitutes the
 	certificate chain. For maximum interoperability the
 	certificates in the chain should be in the correct order, the
 	chain will be sent as is to the peer. If chain certificates
@@ -328,7 +328,7 @@
       <name name="cert_pem"/>
       <desc>
 	<p>Path to a file containing the user certificate on PEM format or possible several
-	certificates where the first one is the users certificate and the rest of the certificates
+	certificates where the first one is the user certificate and the rest of the certificates
 	constitutes the certificate chain. For more details see <seetype marker="#cert">cert()</seetype>,
 	</p>
       </desc>
@@ -337,9 +337,9 @@
     <datatype>
       <name name="key"/>
       <desc>
-	<p>The DER-encoded user's private key or a map refering to a crypto
+	<p>The DER-encoded user's private key or a map referring to a crypto
 	engine and its key reference that optionally can be password protected,
-	seealso <seemfa marker="crypto:crypto#engine_load/4"> crypto:engine_load/4
+	see also <seemfa marker="crypto:crypto#engine_load/4"> crypto:engine_load/4
 	</seemfa> and  <seeguide marker="crypto:engine_load"> Crypto's Users Guide</seeguide>. If this option 
 	is supplied, it overrides option <c>keyfile</c>.</p>
       </desc>
@@ -358,11 +358,11 @@
     <datatype>
       <name name="key_password"/>
       <desc>
-	<p>String containing the user's password. Only used if the 
+	<p>String containing the user's password or a function returning same type. Only used if the
 	private keyfile is password-protected.</p>
       </desc>
     </datatype>
-    
+
     <datatype>
       <name name="cipher_suites"/>
       <desc>
@@ -377,7 +377,7 @@
 	sure they are filtered for cryptolib support
 	<seemfa
 	    marker="#filter_cipher_suites/2"> ssl:filter_cipher_suites/2 </seemfa>
-	Additionaly the functions <seemfa
+	Additionally the functions <seemfa
 	marker="#append_cipher_suites/2"> ssl:append_cipher_suites/2 </seemfa>
 	, <seemfa
 	marker="#prepend_cipher_suites/2"> ssl:prepend_cipher_suites/2</seemfa>,
@@ -498,9 +498,8 @@ version.
       <name name="sign_schemes"/>
 
       <desc>
-	<p>Explicitly list acceptable signature schemes (algorithms),
-	in prefered ordered, for certificates, overrides the
-	algorithms supplied in  <seetype
+	<p>Explicitly list acceptable signature schemes (algorithms)
+	in the preferred order. Overrides the algorithms supplied in <seetype
 	marker="#signature_algs"><c>signature_algs</c></seetype> option for
 	certificates.</p>
 
@@ -889,7 +888,7 @@ fun(srp, Username :: binary(), UserState :: term()) ->
 
     <datatype>
       <name name="session_tickets"/>
-      <desc><p>Configures the session ticket functionalty in TLS 1.3 client and server. </p>
+      <desc><p>Configures the session ticket functionality in TLS 1.3 client and server. </p>
       </desc>
     </datatype>
 
@@ -945,7 +944,7 @@ fun(srp, Username :: binary(), UserState :: term()) ->
     <datatype>
       <name name="client_reuse_session"/>
       <desc>
-	<p>Reuses a specific session. The session should be refered by its session id if it is
+	<p>Reuses a specific session. The session should be referred by its session id if it is
 	earlier saved with the option <c>{reuse_sessions, save}</c> since OTP-21.3 or
 	explicitly specified by its session id and associated data since OTP-22.3.
 	See also
@@ -962,9 +961,19 @@ fun(srp, Username :: binary(), UserState :: term()) ->
       and saved for later reuse. The session ID can be fetched with 
       <seemfa marker="#connection_information/2">connection_information/2</seemfa>
       and used with the client option <seetype marker="#client_reuse_session">reuse_session</seetype>
-      The boolean value true specifies that if possible, automatized session reuse will
+      The boolean value true specifies that if possible, automated session reuse will
       be performed. If a new session is created, and is unique in regard 
       to previous stored sessions, it will be saved for possible later reuse. Since OTP-21.3</p>
+      </desc>
+    </datatype>
+
+    <datatype>
+      <name name="certificate_authorities"/>
+      <desc>
+	<p>If set to true, sends the certificate authorities extension in TLS-1.3 client hello.
+	The default is false. Note that setting it to true may result in a big overhead if you
+	have many trusted CA certificates. 
+	Since OTP-24.3</p>
       </desc>
     </datatype>
 
@@ -1599,7 +1608,7 @@ fun(srp, Username :: binary(), UserState :: term()) ->
       argument is an <c>inet:ip_address()</c> the <c>ReferenceID</c> used for the check will be <c>{ip, Host}</c> otherwise
       <c>dns_id</c> will be assumed with a fallback to <c>ip</c> if that fails. </p>
       <note><p>According to good practices certificates should not use IP-addresses as "server names". It would
-      be very surprising if this happen outside a closed network. </p></note> 
+      be very surprising if this happened outside a closed network. </p></note>
 
 
       <p> If the option <c>{handshake, hello}</c> is used the
@@ -1689,7 +1698,7 @@ fun(srp, Username :: binary(), UserState :: term()) ->
       
       For examples see <seeguide marker="ssl:using_ssl#customizing-cipher-suites"> Customizing cipher suites </seeguide> 
       
-      Additionaly this function also filters the cipher suites to
+      Additionally, this function also filters the cipher suites to
       exclude cipher suites not supported by the cryptolib used by the
       OTP crypto application. That is calling
       ssl:filter_cipher_suites(Suites, []) will be equivalent to only
@@ -1737,6 +1746,11 @@ fun(srp, Username :: binary(), UserState :: term()) ->
 	the process owning the sslsocket will receive messages of type 
 	<seetype marker="#active_msgs"> active_msgs() </seetype>
 	</p>	
+
+	<warning><p>Not setting the timeout makes the server more vulnerable to
+	DoS attacks.
+	</p></warning>
+	
       </desc>
     </func>
 
@@ -1749,9 +1763,11 @@ fun(srp, Username :: binary(), UserState :: term()) ->
 	or equivalent, socket to an SSL socket, that is, performs
         the TLS server-side handshake and returns a TLS socket.</p>
 
-	<warning><p>The <c>Socket</c> shall be in passive mode ({active,
-	false}) before calling this function or else the behavior of this function
-	is undefined.
+	<warning><p>The ordinary <c>Socket</c> shall be in passive mode ({active,
+	false}) before calling this function, and before the client tries
+	to connect with TLS, or else the behavior of this function
+	is undefined. The best way to ensure this is to create the ordinary listen socket
+	in passive mode.
 	</p></warning>
 
 	<p>If <c>Socket</c> is an 
@@ -1760,6 +1776,10 @@ fun(srp, Username :: binary(), UserState :: term()) ->
 	<seemfa marker="#listen/2">listen/2</seemfa> and then performs
 	the TLS/DTLS handshake. Returns a new TLS/DTLS socket if the handshake is successful.</p>
 
+	<warning><p>Not setting the timeout makes the server more vulnerable to
+	DoS attacks.
+	</p></warning>
+	
 	<p>
 	  If option <c>{handshake, hello}</c> is specified the handshake is
 	  paused after receiving the client hello message and the
@@ -1791,7 +1811,7 @@ fun(srp, Username :: binary(), UserState :: term()) ->
       <name since="OTP 21.0" name="handshake_continue" arity="3" />
       <fsummary>Continue the TLS handshake.</fsummary>
       <desc>
-        <p>Continue the TLS handshake possiby with new, additional or changed options.</p>
+        <p>Continue the TLS handshake, possibly with new, additional or changed options.</p>
       </desc>
     </func>
     

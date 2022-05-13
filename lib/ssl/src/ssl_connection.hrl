@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2013-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2013-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -97,7 +97,9 @@
                           socket_tls_closed = false                          ::boolean(),
                           negotiated_version    :: ssl_record:ssl_version() | 'undefined',
                           erl_dist_handle = undefined :: erlang:dist_handle() | 'undefined',
-                          private_key          :: public_key:private_key() | secret_printout() | 'undefined'
+                          cert_key_pairs  = undefined :: [#{private_key =>  public_key:private_key(),
+                                                            certs => [public_key:der_encoded()]}]
+                                                       | secret_printout() | 'undefined'
                         }).
 
 -record(state, {
@@ -106,13 +108,13 @@
                 ssl_options           :: ssl_options(),
                 socket_options        :: #socket_options{},
 
-                %% Hanshake %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+                %% Handshake %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
                 handshake_env         :: #handshake_env{} | secret_printout(),
                 %% Buffer of TLS/DTLS records, used during the TLS
                 %% handshake to when possible pack more than one TLS
-                %% record into the underlaying packet
+                %% record into the underlying packet
                 %% format. Introduced by DTLS - RFC 4347.  The
-                %% mecahnism is also usefull in TLS although we do not
+                %% mechanism is also useful in TLS although we do not
                 %% need to worry about packet loss in TLS. In DTLS we
                 %% need to track DTLS handshake seqnr
                 flight_buffer = []   :: list() | map(),  
@@ -159,9 +161,9 @@
 %%   renegotiation                - TLS 1.3 forbids renegotiation
 %%   hello                        - used in user_hello, handshake continue
 %%   allow_renegotiate            - TLS 1.3 forbids renegotiation
-%%   expecting_next_protocol_negotiation - ALPN replaced NPN, depricated in TLS 1.3
+%%   expecting_next_protocol_negotiation - ALPN replaced NPN, deprecated in TLS 1.3
 %%   expecting_finished           - not implemented, used by abbreviated
-%%   next_protocol                - ALPN replaced NPN, depricated in TLS 1.3
+%%   next_protocol                - ALPN replaced NPN, deprecated in TLS 1.3
 %%
 %% connection_state :: map()
 %%

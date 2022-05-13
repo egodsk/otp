@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2007-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2007-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -369,7 +369,7 @@ handle_info({clean_cert_db, Ref, File},
 	    #state{certificate_db = [CertDb, {RefDb, FileMapDb} | _]} = State) ->
     
     case ssl_pkix_db:lookup(Ref, RefDb) of
-	undefined -> %% Alredy cleaned
+	undefined -> %% Already cleaned
 	    ok;
 	_ ->
 	    clean_cert_db(Ref, CertDb, RefDb, FileMapDb, File)

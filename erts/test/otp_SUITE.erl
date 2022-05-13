@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2000-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2000-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -66,7 +66,8 @@ undefined_functions(Config) when is_list(Config) ->
                       [UndefS,ExcludeFrom]),
     {ok,Undef0} = xref:q(Server, lists:flatten(Q)),
 
-    Filters = [fun ssl_crypto_filter/1,
+    Filters = [fun erts_filter/1,
+               fun ssl_crypto_filter/1,
                fun eunit_filter/1,
                fun dialyzer_filter/1,
                fun wx_filter/1,
@@ -148,6 +149,13 @@ diameter_filter(Undef) ->
                    false;
               ({{diameter_lib,_,_},{erlang,time_offset,0}}) ->
                    false;
+              (_) -> true
+           end, Undef).
+
+erts_filter(Undef) ->
+    filter(fun({_,{prim_socket,_,_}}) -> lists:member(prim_socket, erlang:pre_loaded());
+              ({_,{prim_net,_,_}}) -> lists:member(prim_net, erlang:pre_loaded());
+              ({_,{socket_registry,_,_}}) -> lists:member(socket_registry, erlang:pre_loaded());
               (_) -> true
            end, Undef).
 

@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2000-2020. All Rights Reserved.
+ * Copyright Ericsson AB 2000-2021. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -671,7 +671,7 @@ int ei_make_pid(ei_cnode *ec, erlang_pid *pid)
 
 #undef EI_MAKE_REF_ATOMIC__
 #ifdef _REENTRANT
-#  if ((SIZEOF_LONG == 8 || SIZEOF_LONGLONG == 8)         \
+#  if ((SIZEOF_LONG == 8 || SIZEOF_LONG_LONG == 8)        \
        && (ETHR_HAVE___atomic_compare_exchange_n & 8)     \
        && (ETHR_HAVE___atomic_load_n & 8))
 #    define EI_MAKE_REF_ATOMIC__

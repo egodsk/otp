@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2019-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2019-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -78,10 +78,15 @@ will_succeed(erlang, 'not', [Arg]) ->
     succeeds_if_type(Arg, beam_types:make_boolean());
 will_succeed(erlang, setelement, [#t_integer{elements={Min,Max}},
                                   #t_tuple{exact=Exact,size=Size}, _]) ->
-    case Min >= 1 andalso Max =< Size of
-        true -> yes;
-        false when Exact -> no;
-        false -> maybe
+    if
+        1 =< Min, Max =< Size ->
+            %% The index is always in range.
+            yes;
+        Max < 1; Exact, Size < Min ->
+            %% The index is always out of range.
+            no;
+        true ->
+            'maybe'
     end;
 will_succeed(erlang, size, [Arg]) ->
     ArgType = beam_types:join(#t_tuple{}, #t_bitstring{}),

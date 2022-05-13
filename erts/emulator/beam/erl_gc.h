@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2007-2021. All Rights Reserved.
+ * Copyright Ericsson AB 2007-2022. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -130,13 +130,19 @@ ERTS_GLB_INLINE Eterm follow_moved(Eterm term, Eterm xptr_tag)
  * Global exported
  */
 
-#define ERTS_IS_GC_DESIRED_INTERNAL(Proc, HTop, STop)			\
+#define ERTS_IS_GC_DESIRED_INTERNAL(Proc, HTop, STop, XtraFlags)	\
     ((((STop) - (HTop) < (Sint)(Proc)->mbuf_sz))                        \
      | ((Proc)->off_heap.overhead > (Proc)->bin_vheap_sz)		\
-     | !!((Proc)->flags & F_FORCE_GC))
+     | !!((Proc)->flags & (F_FORCE_GC|XtraFlags)))
 
 #define ERTS_IS_GC_DESIRED(Proc)					\
-    ERTS_IS_GC_DESIRED_INTERNAL((Proc), (Proc)->htop, (Proc)->stop)
+    ERTS_IS_GC_DESIRED_INTERNAL((Proc), (Proc)->htop, (Proc)->stop, 0)
+
+/* ERTS_IS_GC_AFTER_BIF_DESIRED also triggers for flag F_DISABLE_GC,
+ * not to actually do GC but we need to call erts_gc_after_bif_call_lhf
+ * for some bookkeeping of live_hf_end. */
+#define ERTS_IS_GC_AFTER_BIF_DESIRED(Proc)			        \
+    ERTS_IS_GC_DESIRED_INTERNAL((Proc), (Proc)->htop, (Proc)->stop, F_DISABLE_GC)
 
 #define ERTS_FORCE_GC_INTERNAL(Proc, FCalls)				\
     do {								\

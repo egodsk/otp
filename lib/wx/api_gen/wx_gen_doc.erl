@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2020-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2020-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -137,9 +137,10 @@ gen_misc(Files) ->
 
 gen_header(Name) ->
     Legal = "Licensed under the wxWindows Free Documentation Licence, Version 3",
+    {Year, _, _} = date(),
 
     [nl(2), {copyright,
-             [nl(4), {year, ["2020"]},
+             [nl(4), {year, ["2020"]}, {year,[integer_to_list(Year)]},
               nl(4), {holder, ["wxWidgets team."]}]},
      nl(2), {legalnotice, [Legal, nl(2)]},
      nl(2), {title, [Name]},

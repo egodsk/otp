@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1997-2021. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -64,6 +64,7 @@
          bad_dist_ext_size/1,
 	 start_epmd_false/1, no_epmd/1, epmd_module/1,
          bad_dist_fragments/1,
+         exit_dist_fragments/1,
          message_latency_large_message/1,
          message_latency_large_link_exit/1,
          message_latency_large_monitor_exit/1,
@@ -104,7 +105,7 @@ all() ->
      {group, trap_bif}, {group, dist_auto_connect},
      dist_parallel_send, atom_roundtrip, unicode_atom_roundtrip,
      contended_atom_cache_entry, contended_unicode_atom_cache_entry,
-     {group, message_latency},
+     {group, message_latency}, exit_dist_fragments,
      {group, bad_dist}, {group, bad_dist_ext},
      dist_entry_refc_race,
      start_epmd_false, no_epmd, epmd_module, system_limit,
@@ -1082,21 +1083,24 @@ dist_auto_connect_relay(Parent) ->
 
 
 dist_parallel_send(Config) when is_list(Config) ->
-    {ok, RNode} = start_node(dist_parallel_receiver),
-    {ok, SNode} = start_node(dist_parallel_sender),
-    WatchDog = spawn_link(
-                 fun () ->
-                         TRef = erlang:start_timer((2*60*1000), self(), oops),
-                         receive
-                             {timeout, TRef, _ } ->
-                                 spawn(SNode, fun () -> abort(timeout) end),
-                                 spawn(RNode, fun () -> abort(timeout) end)
-                                 %%       rpc:cast(SNode, erlang, halt,
-                                 %%		["Timetrap (sender)"]),
-                                 %%       rpc:cast(RNode, erlang, halt,
-                                 %%		["Timetrap (receiver)"])
-                         end
-                 end),
+    %% Disabled "connect all" so global wont interfere...
+    {ok, RNode} = start_node(dist_parallel_receiver, "-connect_all false"),
+    {ok, SNode} = start_node(dist_parallel_sender, "-connect_all false"),
+
+    %% WatchDog = spawn_link(
+    %%             fun () ->
+    %%                     TRef = erlang:start_timer((2*60*1000), self(), oops),
+    %%                     receive
+    %%                         {timeout, TRef, _ } ->
+    %%                             spawn(SNode, fun () -> abort(timeout) end),
+    %%                             spawn(RNode, fun () -> abort(timeout) end)
+    %%                              %%       rpc:cast(SNode, erlang, halt,
+    %%                              %%		["Timetrap (sender)"]),
+    %%                              %%       rpc:cast(RNode, erlang, halt,
+    %%                              %%		["Timetrap (receiver)"])
+    %%                      end
+    %%              end),
+
     MkSndrs = fun (Receiver) ->
                       lists:map(fun (_) ->
                                         spawn_link(SNode,
@@ -1105,18 +1109,23 @@ dist_parallel_send(Config) when is_list(Config) ->
                                                    [self(), Receiver, 1000])
                                 end, lists:seq(1, 64))
               end,
+    Parent = self(),
     SndrsStart = fun (Sndrs) ->
-                         Parent = self(),
                          spawn_link(SNode,
                            fun () ->
                                    lists:foreach(fun (P) ->
                                                          P ! {go, Parent}
-                                                 end, Sndrs)
+                                                 end, Sndrs),
+                                   unlink(Parent)
                            end)
                  end,
     SndrsWait = fun (Sndrs) ->
                         lists:foreach(fun (P) ->
-                                              receive {P, done} -> ok end
+                                              receive
+                                                  {P, done} ->
+                                                      unlink(P),
+                                                      ok
+                                              end
                                       end, Sndrs)
                 end,
     DPR = spawn_link(RNode, ?MODULE, dist_parallel_receiver, []),
@@ -1133,8 +1142,8 @@ dist_parallel_send(Config) when is_list(Config) ->
     unlink(DEPR),
     exit(DEPR, bang),
 
-    unlink(WatchDog),
-    exit(WatchDog, bang),
+    %% unlink(WatchDog),
+    %% exit(WatchDog, bang),
 
     stop_node(RNode),
     stop_node(SNode),
@@ -1785,8 +1794,9 @@ start_link(Offender,P) ->
 bad_dist_structure(Config) when is_list(Config) ->
     ct:timetrap({seconds, 15}),
 
-    {ok, Offender} = start_node(bad_dist_structure_offender),
-    {ok, Victim} = start_node(bad_dist_structure_victim),
+    %% Disabled "connect all" so global wont interfere...
+    {ok, Offender} = start_node(bad_dist_structure_offender, "-connect_all false"),
+    {ok, Victim} = start_node(bad_dist_structure_victim, "-connect_all false"),
     start_node_monitors([Offender,Victim]),
     Parent = self(),
     P = spawn(Victim,
@@ -1880,8 +1890,9 @@ bad_dist_structure(Config) when is_list(Config) ->
 bad_dist_fragments(Config) when is_list(Config) ->
     ct:timetrap({seconds, 15}),
 
-    {ok, Offender} = start_node(bad_dist_fragment_offender),
-    {ok, Victim} = start_node(bad_dist_fragment_victim),
+    %% Disabled "connect all" so global wont interfere...
+    {ok, Offender} = start_node(bad_dist_fragment_offender, "-connect_all false"),
+    {ok, Victim} = start_node(bad_dist_fragment_victim, "-connect_all false"),
 
     Msg = iolist_to_binary(dmsg_ext(lists:duplicate(255,255))),
 
@@ -2035,8 +2046,9 @@ send_bad_fragments(Offender,VictimNode,Victim,Ctrl,WhereToPutSelf,Fragments) ->
     end.
 
 bad_dist_ext_receive(Config) when is_list(Config) ->
-    {ok, Offender} = start_node(bad_dist_ext_receive_offender),
-    {ok, Victim} = start_node(bad_dist_ext_receive_victim),
+    %% Disabled "connect all" so global wont interfere...
+    {ok, Offender} = start_node(bad_dist_ext_receive_offender, "-connect_all false"),
+    {ok, Victim} = start_node(bad_dist_ext_receive_victim, "-connect_all false"),
     start_node_monitors([Offender,Victim]),
 
     Parent = self(),
@@ -2107,8 +2119,9 @@ bad_dist_ext_receive(Config) when is_list(Config) ->
 
 
 bad_dist_ext_process_info(Config) when is_list(Config) ->
-    {ok, Offender} = start_node(bad_dist_ext_process_info_offender),
-    {ok, Victim} = start_node(bad_dist_ext_process_info_victim),
+    %% Disabled "connect all" so global wont interfere...
+    {ok, Offender} = start_node(bad_dist_ext_process_info_offender, "-connect_all false"),
+    {ok, Victim} = start_node(bad_dist_ext_process_info_victim, "-connect_all false"),
     start_node_monitors([Offender,Victim]),
 
     Parent = self(),
@@ -2167,8 +2180,9 @@ bad_dist_ext_process_info(Config) when is_list(Config) ->
     stop_node(Victim).
 
 bad_dist_ext_control(Config) when is_list(Config) ->
-    {ok, Offender} = start_node(bad_dist_ext_control_offender),
-    {ok, Victim} = start_node(bad_dist_ext_control_victim),
+    %% Disabled "connect all" so global wont interfere...
+    {ok, Offender} = start_node(bad_dist_ext_control_offender, "-connect_all false"),
+    {ok, Victim} = start_node(bad_dist_ext_control_victim, "-connect_all false"),
     start_node_monitors([Offender,Victim]),
 
     pong = rpc:call(Victim, net_adm, ping, [Offender]),
@@ -2186,8 +2200,9 @@ bad_dist_ext_control(Config) when is_list(Config) ->
     stop_node(Victim).
 
 bad_dist_ext_connection_id(Config) when is_list(Config) ->
-    {ok, Offender} = start_node(bad_dist_ext_connection_id_offender),
-    {ok, Victim} = start_node(bad_dist_ext_connection_id_victim),
+    %% Disabled "connect all" so global wont interfere...
+    {ok, Offender} = start_node(bad_dist_ext_connection_id_offender, "-connect_all false"),
+    {ok, Victim} = start_node(bad_dist_ext_connection_id_victim, "-connect_all false"),
     start_node_monitors([Offender,Victim]),
 
     Parent = self(),
@@ -2253,10 +2268,11 @@ bad_dist_ext_connection_id(Config) when is_list(Config) ->
 
 %% OTP-14661: Bad message is discovered by erts_msg_attached_data_size
 bad_dist_ext_size(Config) when is_list(Config) ->
-    {ok, Offender} = start_node(bad_dist_ext_process_info_offender),
+    %% Disabled "connect all" so global wont interfere...
+    {ok, Offender} = start_node(bad_dist_ext_process_info_offender, "-connect_all false"),
     %%Prog = "Prog=/home/uabseri/src/otp_new3/bin/cerl -rr -debug",
     Prog = [],
-    {ok, Victim} = start_node(bad_dist_ext_process_info_victim, [], Prog),
+    {ok, Victim} = start_node(bad_dist_ext_process_info_victim, "-connect_all false", Prog),
     start_node_monitors([Offender,Victim]),
 
     Parent = self(),
@@ -2540,6 +2556,169 @@ dmsg_bad_atom_cache_ref() ->
 
 dmsg_bad_tag() ->  %% Will fail early at heap size calculation
     [$?, 66].
+
+%% Test that processes exiting while sending a fragmented message works
+%% as it should. We test that this works while the process doing the send
+%% is suspended/resumed in order to trigger bugs in suspend/resume handling
+%% while exiting.
+%% We also make sure that the binary memory of the receiving node does not grow
+%% without shrinking back as there used to be a memory leak on the receiving side.
+exit_dist_fragments(_Config) ->
+    {ok, Node} = start_node(?FUNCTION_NAME),
+    try
+        ct:log("Allocations before:~n~p",[erpc:call(Node,instrument,allocations, [])]),
+        {BinInfo, BinInfoMref} =
+            spawn_monitor(Node,
+                          fun() ->
+                                  (fun F(Acc) ->
+                                           H = try erlang:memory(binary)
+                                               catch _:_ -> 0 end,
+                                           receive
+                                               {get, Pid} ->
+                                                   After = try erlang:memory(binary)
+                                                           catch _:_ -> 0 end,
+                                                   Pid ! lists:reverse([After,H|Acc])
+                                           after 100 ->
+                                                   F([H|Acc])
+                                           end
+                                   end)([])
+                          end),
+        {Tracer, Mref} = spawn_monitor(fun gather_exited/0),
+        erlang:trace(self(), true, [{tracer, Tracer}, set_on_spawn, procs, exiting]),
+        exit_suspend(Node),
+        receive
+            {'DOWN',Mref,_,_,_} ->
+                BinInfo ! {get, self()},
+                receive
+                    {'DOWN',BinInfoMref,_,_,Reason} ->
+                        ct:fail(Reason);
+                    Info ->
+                        Before = hd(Info),
+                        Max = lists:max(Info),
+                        After = lists:last(Info),
+                        ct:log("Binary memory before: ~p~n"
+                               "Binary memory max: ~p~n"
+                               "Binary memory after: ~p",
+                               [Before, Max, After]),
+                        ct:log("Allocations after:~n~p",
+                               [erpc:call(Node,instrument,allocations, [])]),
+                        %% We check that the binary data used after is not too large
+                        if
+                            (After - Before) / (Max - Before) > 0.05 ->
+                                ct:log("Memory ratio was ~p",[(After - Before) / (Max - Before)]),
+                                ct:fail("Potential binary memory leak!");
+                            true -> ok
+                        end
+                end
+        end
+    after
+        stop_node(Node)
+    end.
+
+%% Make sure that each spawned process also has exited
+gather_exited() ->
+    process_flag(message_queue_data, off_heap),
+    gather_exited(#{}).
+gather_exited(Pids) ->
+    receive
+        {trace,Pid,spawned,_,_} ->
+            gather_exited(Pids#{ Pid => true });
+        {trace,Pid,exited_out,_,_} ->
+            {true, NewPids} = maps:take(Pid, Pids),
+            gather_exited(NewPids);
+        _M ->
+            gather_exited(Pids)
+    after 1000 ->
+            if Pids == #{} -> ok;
+               true -> exit(Pids)
+            end
+    end.
+
+exit_suspend(RemoteNode) ->
+    exit_suspend(RemoteNode, 100).
+exit_suspend(RemoteNode, N) ->
+    Payload = case erlang:system_info(wordsize) of
+                  8 ->
+                      [<<0:100000/unit:8>> || _ <- lists:seq(1, 10)];
+                  4 ->
+                      [<<0:100000/unit:8>> || _ <- lists:seq(1, 2)]
+              end,
+    exit_suspend(RemoteNode, N, Payload).
+exit_suspend(RemoteNode, N, Payload) ->
+    Echo = fun F() ->
+                   receive
+                       {From, Msg} ->
+                           From ! erlang:iolist_size(Msg),
+                           F()
+                   end
+           end,
+    Pinger =
+        fun() ->
+                false = process_flag(trap_exit, true),
+                RemotePid = spawn_link(RemoteNode, Echo),
+                Iterations = case erlang:system_info(debug_compiled) of
+                                 false ->
+                                     100;
+                                 _ ->
+                                     10
+                             end,
+                exit_suspend_loop(RemotePid, 2, Payload, Iterations)
+        end,
+    Pids = [spawn_link(Pinger) || _ <- lists:seq(1, N)],
+    MRefs = [monitor(process, Pid) || Pid <- Pids],
+    [receive {'DOWN',MRef,_,_,_} -> ok end || MRef <- MRefs],
+    Pids.
+
+exit_suspend_loop(RemotePid, _Suspenders, _Payload, 0) ->
+    exit(RemotePid, die),
+    receive
+        {'EXIT', RemotePid, _} ->
+            ok
+    end;
+exit_suspend_loop(RemotePid, Suspenders, Payload, N) ->
+    LocalPid = spawn_link(
+                 fun() ->
+                         Parent = self(),
+                         [spawn_link(
+                            fun F() ->
+                                    try
+                                        begin
+                                            erlang:suspend_process(Parent),
+                                            erlang:yield(),
+                                            erlang:suspend_process(Parent),
+                                            erlang:yield(),
+                                            erlang:resume_process(Parent),
+                                            erlang:yield(),
+                                            erlang:suspend_process(Parent),
+                                            erlang:yield(),
+                                            erlang:resume_process(Parent),
+                                            erlang:yield(),
+                                            erlang:resume_process(Parent),
+                                            erlang:yield()
+                                        end of
+                                        _ ->
+                                            F()
+                                    catch _:_ ->
+                                            ok
+                                    end
+                            end) || _ <- lists:seq(1, Suspenders)],
+                         (fun F() ->
+                                  RemotePid ! {self(), Payload},
+                                  receive _IOListSize -> ok end,
+                                  F()
+                          end)()
+                 end),
+    exit_suspend_loop(LocalPid, RemotePid, Suspenders, Payload, N - 1).
+exit_suspend_loop(LocalPid, RemotePid, Suspenders, Payload, N) ->
+    receive
+        {'EXIT', LocalPid, _} ->
+            exit_suspend_loop(RemotePid, Suspenders, Payload, N);
+        {'EXIT', _, Reason} ->
+            exit(Reason)
+    after 100 ->
+            exit(LocalPid, die),
+            exit_suspend_loop(LocalPid, RemotePid, Suspenders, Payload, N)
+    end.
 
 start_epmd_false(Config) when is_list(Config) ->
     %% Start a node with the option -start_epmd false.

@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2002-2021. All Rights Reserved.
+ * Copyright Ericsson AB 2002-2022. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -412,25 +412,37 @@ erts_gc_after_bif_call_lhf(Process* p, ErlHeapFragment *live_hf_end,
 {
     int cost;
 
-    if (p->flags & F_HIBERNATE_SCHED) {
-	/*
-	 * We just hibernated. We do *not* want to mess
-	 * up the hibernation by an ordinary GC...
-	 */
+    if (!p->mbuf) {
+        /* Must have GC:d in BIF call... invalidate live_hf_end */
+        live_hf_end = ERTS_INVALID_HFRAG_PTR;
+    }
+
+    if (p->flags & (F_HIBERNATE_SCHED | F_DISABLE_GC)) {
+
+        if ((p->flags & F_DISABLE_GC)
+            && p->live_hf_end == ERTS_INVALID_HFRAG_PTR
+            && is_non_value(result)
+            && p->freason == TRAP) {
+            /* This is first trap with disabled GC. Save live_hf_end marker. */
+            p->live_hf_end = live_hf_end;
+        }
+        /*else:
+         * a subsequent trap with disabled GC
+         *
+         * OR
+         *
+         * We just hibernated. We do *not* want to mess
+         * up the hibernation by an ordinary GC...
+         */
 	return result;
     }
 
-    if (p->sig_qs.flags & FS_ON_HEAP_MSGQ) {
+    if (p->sig_qs.flags & (FS_ON_HEAP_MSGQ|FS_OFF_HEAP_MSGQ_CHNG)) {
         erts_proc_lock(p, ERTS_PROC_LOCK_MSGQ);
         erts_proc_sig_fetch(p);
 	erts_proc_unlock(p, ERTS_PROC_LOCK_MSGQ);
     }
     
-    if (!p->mbuf) {
-	/* Must have GC:d in BIF call... invalidate live_hf_end */
-	live_hf_end = ERTS_INVALID_HFRAG_PTR;
-    }
-
     if (is_non_value(result)) {
 	if (p->freason == TRAP) {
 	    cost = garbage_collect(p, live_hf_end, 0, regs, p->arity, p->fcalls, 0);
@@ -484,16 +496,6 @@ delay_garbage_collection(Process *p, ErlHeapFragment *live_hf_end, int need, int
     int reds_left;
 
     ERTS_HOLE_CHECK(p);
-
-    if ((p->flags & F_DISABLE_GC)
-	&& p->live_hf_end == ERTS_INVALID_HFRAG_PTR) {
-	/*
-	 * A BIF yielded with disabled GC. Remember
-	 * heap fragments created by the BIF until we
-	 * do next GC.
-	 */
-	p->live_hf_end = live_hf_end;
-    }
 
     if (need == 0) {
         if (p->flags & (F_DIRTY_MAJOR_GC|F_DIRTY_MINOR_GC)) {
@@ -876,7 +878,7 @@ int
 erts_garbage_collect_nobump(Process* p, int need, Eterm* objv, int nobj, int fcalls)
 {
     int reds, reds_left;
-    if (p->sig_qs.flags & FS_ON_HEAP_MSGQ) {
+    if (p->sig_qs.flags & (FS_ON_HEAP_MSGQ|FS_OFF_HEAP_MSGQ_CHNG)) {
         erts_proc_lock(p, ERTS_PROC_LOCK_MSGQ);
         erts_proc_sig_fetch(p);
 	erts_proc_unlock(p, ERTS_PROC_LOCK_MSGQ);
@@ -893,7 +895,7 @@ void
 erts_garbage_collect(Process* p, int need, Eterm* objv, int nobj)
 {
     int reds;
-    if (p->sig_qs.flags & FS_ON_HEAP_MSGQ) {
+    if (p->sig_qs.flags & (FS_ON_HEAP_MSGQ|FS_OFF_HEAP_MSGQ_CHNG)) {
         erts_proc_lock(p, ERTS_PROC_LOCK_MSGQ);
         erts_proc_sig_fetch(p);
 	erts_proc_unlock(p, ERTS_PROC_LOCK_MSGQ);
@@ -1098,7 +1100,7 @@ erts_garbage_collect_literals(Process* p, Eterm* literals,
 
     p->flags |= F_NEED_FULLSWEEP;
 
-    if (p->sig_qs.flags & FS_ON_HEAP_MSGQ) {
+    if (p->sig_qs.flags & (FS_ON_HEAP_MSGQ|FS_OFF_HEAP_MSGQ_CHNG)) {
         erts_proc_lock(p, ERTS_PROC_LOCK_MSGQ);
         erts_proc_sig_fetch(p);
 	erts_proc_unlock(p, ERTS_PROC_LOCK_MSGQ);
@@ -2559,7 +2561,7 @@ setup_rootset(Process *p, Eterm *objv, int nobj, Rootset *rootset)
 	 */
 
 #ifdef DEBUG
-        if (p->sig_qs.flags & FS_ON_HEAP_MSGQ) {
+        if (p->sig_qs.flags & (FS_ON_HEAP_MSGQ|FS_OFF_HEAP_MSGQ_CHNG)) {
             erts_proc_lock(p, ERTS_PROC_LOCK_MSGQ);
             /*
              * Verify that we do not have any messages in the outer

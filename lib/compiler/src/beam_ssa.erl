@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2018-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2018-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -785,6 +785,9 @@ dom_intersection([S], _Df) ->
 dom_intersection([S|Ss], Df) ->
     dom_intersection(S, Ss, Df).
 
+dom_intersection([0]=S, [_|_], _Df) ->
+    %% No need to continue. (We KNOW that all sets end in [0].)
+    S;
 dom_intersection(S1, [S2|Ss], Df) ->
     dom_intersection(dom_intersection_1(S1, S2, Df), Ss, Df);
 dom_intersection(S, [], _Df) -> S.
@@ -793,11 +796,26 @@ dom_intersection_1([E1|Es1]=Set1, [E2|Es2]=Set2, Df) ->
     %% Blocks are numbered in the order they are found in
     %% reverse postorder.
     #{E1:=Df1,E2:=Df2} = Df,
-    if Df1 > Df2 ->
-            dom_intersection_1(Es1, Set2, Df);
-       Df2 > Df1 ->
-            dom_intersection_1(Es2, Set1, Df);  %switch arguments!
-       true ->                                  %Set1 == Set2
+    if
+        Df1 > Df2 ->
+            dom_intersection_2(Es1, Set2, Df, Df2);
+        Df2 > Df1 ->
+            dom_intersection_2(Es2, Set1, Df, Df1);
+        true ->                                  %Set1 == Set2
+            %% The common suffix of the sets is the intersection.
+            Set1
+    end.
+
+dom_intersection_2([E1|Es1]=Set1, [_|Es2]=Set2, Df, Df2) ->
+    %% Blocks are numbered in the order they are found in
+    %% reverse postorder.
+    #{E1:=Df1} = Df,
+    if
+        Df1 > Df2 ->
+            dom_intersection_2(Es1, Set2, Df, Df2);
+        Df2 > Df1 ->
+            dom_intersection_2(Es2, Set1, Df, Df1);  %switch arguments
+        true ->                                  %Set1 == Set2
             %% The common suffix of the sets is the intersection.
             Set1
     end.
