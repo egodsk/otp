@@ -2,7 +2,7 @@
 %% -*- erlang -*-
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2009-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2009-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -77,7 +77,7 @@ parse(InDev, OutDev, CPath) ->
 
 
 parse_line(CPath, Line) ->
-    case re:run(Line, "<codeinclude([^>]*)>.*</codeinclude>", [{capture, [1], list}]) of
+    case re:run(Line, "<codeinclude(.*)(>.*</codeinclude>|/>)", [{capture, [1], list}]) of
         {match,[Attributes]} ->
             File =
                 case re:run(Attributes,"file=\"([^\"]+)\"",[{capture, [1], list}]) of

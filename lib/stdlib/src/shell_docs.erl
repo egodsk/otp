@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2021. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -344,7 +344,7 @@ get_doc(Module) ->
       Arity :: arity(),
       Anno :: erl_anno:anno(),
       Signature :: [binary()],
-      Metadata :: #{}.
+      Metadata :: map().
 get_doc(Module, Function, Arity) ->
     {ok, #docs_v1{ docs = Docs } = D } = code:get_doc(Module),
     FnFunctions =
@@ -428,7 +428,7 @@ render(Module, Function, Arity, #docs_v1{ docs = Docs } = D, Config)
       Arity :: arity(),
       Anno :: erl_anno:anno(),
       Signature :: [binary()],
-      Metadata :: #{}.
+      Metadata :: map().
 get_type_doc(Module, Type, Arity) ->
     {ok, #docs_v1{ docs = Docs } = D } = code:get_doc(Module),
     FnFunctions =
@@ -499,7 +499,7 @@ render_type(_Module, Type, Arity, #docs_v1{ docs = Docs } = D, Config) ->
       Arity :: arity(),
       Anno :: erl_anno:anno(),
       Signature :: [binary()],
-      Metadata :: #{}.
+      Metadata :: map().
 get_callback_doc(Module, Callback, Arity) ->
     {ok, #docs_v1{ docs = Docs } = D } = code:get_doc(Module),
     FnFunctions =

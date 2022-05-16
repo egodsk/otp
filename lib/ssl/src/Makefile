@@ -1,7 +1,7 @@
 #
 # %CopyrightBegin%
 #
-# Copyright Ericsson AB 1999-2021. All Rights Reserved.
+# Copyright Ericsson AB 1999-2022. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -182,7 +182,7 @@ $(TARGET_FILES): $(BEHAVIOUR_TARGET_FILES)
 $(DEP_FILE): $(ERL_FILES)
 	@echo SED $(TARGET) $(ERL_TOP_NATIVE)
 	$(gen_verbose)erlc -M $(ERL_FILES) \
-	| sed "s@[a-zA-Z]\?$(ERL_TOP_NATIVE)/\(bootstrap/\)\?lib/\([^/]\+/\)@../../\2@g" \
+	| perl -pe "s@ [a-zA-Z]?$(ERL_TOP_NATIVE)/(?:bootstrap/)?lib/([^/]+)@ ../../\1@g" 2> /dev/null \
 	| sed "s/\.$(EMULATOR)/\.$$\(EMULATOR\)/" \
 	| sed 's@^dtls_@$$(EBIN)/dtls_@' \
 	| sed 's@^inet_@$$(EBIN)/inet_@' \

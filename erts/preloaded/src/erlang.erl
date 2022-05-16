@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1996-2021. All Rights Reserved.
+%% Copyright Ericsson AB 1996-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -1886,7 +1886,7 @@ send_after(_Time, _Dest, _Msg, _Options) ->
 %% seq_trace/2
 -spec erlang:seq_trace(P1, P2) -> seq_trace_info_returns() | {term(), term(), term(), term(), term()} when
       P1 :: atom(),
-      P2 :: boolean() | {integer(), integer()} | integer() | [].
+      P2 :: term().
 seq_trace(_P1, _P2) ->
     erlang:nif_error(undefined).
 

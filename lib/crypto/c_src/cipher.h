@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2010-2020. All Rights Reserved.
+ * Copyright Ericsson AB 2010-2022. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,7 @@ struct cipher_type_t {
 	const char* str;    /* before init */
 	ERL_NIF_TERM atom;  /* after init */
     }type;
+     const char* str_v3;      /* the algorithm name as in OpenSSL 3.x */
     union {
 	const EVP_CIPHER* (*funcp)(void); /* before init, NULL if notsup */
 	const EVP_CIPHER* p;              /* after init, NULL if notsup */

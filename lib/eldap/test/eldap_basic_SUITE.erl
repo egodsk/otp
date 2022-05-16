@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2012-2018. All Rights Reserved.
+%% Copyright Ericsson AB 2012-2021. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -59,6 +59,9 @@
          search_non_existant/1,
          search_referral/1,
          search_two_hits/1,
+         search_extensible_match_with_dn/1,
+         search_extensible_match_without_dn/1,
+         search_paged_results/1,
          ssl_connection/1,
          start_tls_on_ssl_should_fail/1,
          start_tls_twice_should_fail/1,
@@ -129,9 +132,12 @@ groups() ->
 		      search_filter_or,
 		      search_filter_and_not,
 		      search_two_hits,
+		      search_extensible_match_with_dn,
+		      search_extensible_match_without_dn,
 		      search_referral,
                       search_filter_or_sizelimit_ok,
                       search_filter_or_sizelimit_exceeded,
+                      search_paged_results,
 		      modify,
 		      modify_referral,
 		      delete,
@@ -157,19 +163,25 @@ connection_tests() ->
     ].
 
 
+ldap_servers(_Config) ->
+    ["ulrad",
+     "orome",
+     "ecthelion",
+     "bifur"
+    ].
+
 
 init_per_suite(Config) ->
     SSL_available = init_ssl_certs_et_al(Config),
-    LDAP_server =  find_first_server(false, [{config,eldap_server},
-					     {config,ldap_server}, 
-					     {"localhost",9876},
-					     {"aramis.otp.ericsson.se",9876}]),
+    ServerHosts = ["localhost" | random_sorted(ldap_servers(Config))],
+    LDAP_server =  find_first_server(false,
+                                     [{H,9876} || H <- ServerHosts]),
+
     LDAPS_server =
 	case SSL_available of
 	    true ->
-		find_first_server(true,  [{config,ldaps_server},
-					  {"localhost",9877},
-					  {"aramis.otp.ericsson.se",9877}]);
+		find_first_server(true,
+                                  [{H,9877} || H <- ServerHosts]);
 	    false ->
 		undefined
 	end,
@@ -187,7 +199,7 @@ end_per_suite(_Config) ->
 init_per_group(return_values, Config) ->
     case proplists:get_value(ldap_server,Config) of
 	undefined ->
-	    {skip, "LDAP server not availble"};
+	    {skip, "LDAP server not available"};
 	{Host,Port} ->
 	    ct:comment("ldap://~s:~p",[Host,Port]),
 	    Config
@@ -195,7 +207,7 @@ init_per_group(return_values, Config) ->
 init_per_group(plain_api, Config0) ->
     case proplists:get_value(ldap_server,Config0) of
 	undefined ->
-	    {skip, "LDAP server not availble"};
+	    {skip, "LDAP server not available"};
 	Server = {Host,Port} ->
 	    ct:comment("ldap://~s:~p",[Host,Port]),
 	    initialize_db([{server,Server}, {ssl_flag,false}, {start_tls,false} | Config0])
@@ -203,7 +215,7 @@ init_per_group(plain_api, Config0) ->
 init_per_group(ssl_api, Config0) ->
     case proplists:get_value(ldaps_server,Config0) of
 	undefined ->
-	    {skip, "LDAPS server not availble"};
+	    {skip, "LDAPS server not available"};
 	Server = {Host,Port} ->
 	    ct:comment("ldaps://~s:~p",[Host,Port]),
 	    initialize_db([{server,Server}, {ssl_flag,true}, {start_tls,false} | Config0])
@@ -211,9 +223,9 @@ init_per_group(ssl_api, Config0) ->
 init_per_group(start_tls_api, Config0) ->
     case {proplists:get_value(ldap_server,Config0), proplists:get_value(ssl_available,Config0)} of
 	{undefined,true} ->
-	    {skip, "LDAP server not availble"};
+	    {skip, "LDAP server not available"};
 	{_,false} ->
-	    {skip, "TLS not availble"};
+	    {skip, "TLS not available"};
 	{Server={Host,Port}, true} ->
 	    ct:comment("ldap://~s:~p + start_tls",[Host,Port]),
 	    Config = [{server,Server}, {ssl_flag,false} | Config0],
@@ -722,6 +734,87 @@ search_two_hits(Config) ->
     [ok=eldap:delete(H,DN) || DN <- ExpectedDNs].
 
 %%%----------------------------------------------------------------
+search_extensible_match_with_dn(Config) ->
+    H = proplists:get_value(handle, Config),
+    BasePath = proplists:get_value(eldap_path, Config),
+
+    %% Create intermediate tree
+    OU1 = "o=Designers," ++ BasePath,
+    ok = eldap:add(H, OU1, [{"objectclass", ["top", "organization"]}, {"o", ["Designers"]}]),
+    OU2 = "o=Graphics," ++ BasePath,
+    ok = eldap:add(H, OU2, [{"objectclass", ["top", "organization"]}, {"o", ["Graphics"]}]),
+
+    %% Add objects, they belongs to different trees
+    DN1 = "cn=Bob Noorda,o=Designers," ++ BasePath,
+    DN2 = "cn=Bob Noorda,o=Graphics," ++ BasePath,
+    ok = eldap:add(H, DN1,
+            [{"objectclass", ["person"]},
+            {"cn", ["Bob Noorda"]},
+            {"sn", ["Noorda"]},
+            {"description", ["Amsterdam"]}]),
+    ok = eldap:add(H, DN2,
+            [{"objectclass", ["person"]},
+            {"cn", ["Bob Noorda"]},
+            {"sn", ["Noorda"]},
+            {"description", ["Milan"]}]),
+    
+    %% Search using extensible filter only in Designers tree
+    Filter = eldap:'and'([
+        eldap:extensibleMatch("Designers", [{type, "o"}, {dnAttributes, true}]),
+        eldap:equalityMatch("sn", "Noorda")
+    ]),
+    {ok, #eldap_search_result{entries=Es}} = 
+    eldap:search(H, #eldap_search{base = BasePath,
+        filter = Filter,
+        scope=eldap:wholeSubtree()}),
+
+    %% Check
+    [DN1] = [D || #eldap_entry{object_name=D} <- Es],
+
+    %% Restore the database
+    [ok=eldap:delete(H,DN) || DN <- [DN1, DN2, OU1, OU2]].
+
+%%%----------------------------------------------------------------
+search_extensible_match_without_dn(Config) ->
+    H = proplists:get_value(handle, Config),
+    BasePath = proplists:get_value(eldap_path, Config),
+
+    %% Create intermediate tree
+    OU1 = "o=Teachers," ++ BasePath,
+    ok = eldap:add(H, OU1, [{"objectclass", ["top", "organization"]}, {"o", ["Teachers"]}]),
+    OU2 = "o=Designers," ++ BasePath,
+    ok = eldap:add(H, OU2, [{"objectclass", ["top", "organization"]}, {"o", ["Designers"]}]),
+
+    %% Add objects, they belongs to different trees
+    DN1 = "cn=Max Huber,o=Teachers," ++ BasePath,
+    DN2 = "cn=Max Huber,o=Designers," ++ BasePath,
+    ok = eldap:add(H, DN1,
+            [{"objectclass", ["person"]},
+            {"cn", ["Max Huber"]},
+            {"sn", ["Huber"]},
+            {"description", ["Baar"]}]),
+    ok = eldap:add(H, DN2,
+            [{"objectclass", ["person"]},
+            {"cn", ["Max Huber"]},
+            {"sn", ["Huber"]},
+            {"description", ["Milan"]}]),
+    
+    %% Search using extensible filter without dn attribute
+    Filter = eldap:extensibleMatch("Huber", [{type, "sn"}]),
+    {ok, #eldap_search_result{entries=Es}} =
+	eldap:search(H, #eldap_search{base = BasePath,
+        filter = Filter,
+        scope = eldap:wholeSubtree()
+    }),
+
+    %% And check that they are the expected ones:
+    ExpectedDNs = lists:sort([DN1, DN2]),
+    ExpectedDNs = lists:sort([D || #eldap_entry{object_name=D} <- Es]),
+
+    %% Restore the database:
+    [ok=eldap:delete(H,DN) || DN <- [DN1, DN2, OU1, OU2]].
+
+%%%----------------------------------------------------------------
 search_referral(Config) ->
     H = proplists:get_value(handle, Config),
     BasePath = proplists:get_value(eldap_path, Config),
@@ -730,6 +823,61 @@ search_referral(Config) ->
 	eldap:search(H, #eldap_search{base = DN,
 				      filter = eldap:present("description"),
 				      scope=eldap:singleLevel()}).
+
+%%%----------------------------------------------------------------
+search_paged_results(Config) ->
+    H = proplists:get_value(handle, Config),
+    BasePath = proplists:get_value(eldap_path, Config),
+    %% Add a lot of objects:
+    Desc = "Frogs",
+    Names = ["Frog" ++ integer_to_list(N) || N <- lists:seq(1, 20)],
+    DNs = [{"cn=Jeremy " ++ N ++ "," ++ BasePath, [{"objectclass", ["person"]},
+                                                 {"cn", ["Jeremy " ++ N]},
+                                                 {"sn", [N]},
+                                                 {"description", [Desc]}]} || N <- Names],
+    [ok = eldap:add(H, Entry, Attrs) || {Entry, Attrs} <- DNs],
+
+    PageSize = 10,
+
+    Control1 = eldap:paged_result_control(PageSize),
+
+    {ok, SearchResult1} =
+        eldap:search(H,
+                     #eldap_search{base = BasePath,
+                                   filter = eldap:equalityMatch("description", Desc),
+                                   scope=eldap:singleLevel()},
+                     [Control1]),
+
+
+    #eldap_search_result{entries=Es1} = Res = SearchResult1,
+
+    PageSize = length(Es1),
+
+    {ok, Cookie1} = eldap:paged_result_cookie(SearchResult1),
+
+    Control2 = eldap:paged_result_control(PageSize, Cookie1),
+
+    {ok, SearchResult2} =
+        eldap:search(H,
+                     #eldap_search{base = BasePath,
+                                   filter = eldap:equalityMatch("description", Desc),
+                                   scope=eldap:singleLevel()},
+                     [Control2]),
+
+    #eldap_search_result{entries=Es2} = SearchResult2,
+
+    PageSize = length(Es2),
+
+    %% all results have been returned so cookie should be empty
+    {ok, []} = eldap:paged_result_cookie(SearchResult2),
+
+    ExpectedDNs = lists:sort([DN || {DN, _} <- DNs]),
+    ResultDNs = lists:sort([DN || #eldap_entry{object_name=DN} <- Es1 ++ Es2]),
+
+    ExpectedDNs = ResultDNs,
+
+    %% Restore the database:
+    [ok=eldap:delete(H,DN) || {DN, _} <- DNs].
 
 %%%----------------------------------------------------------------
 modify(Config) ->
@@ -761,7 +909,7 @@ modify(Config) ->
 		     #eldap_search{base = BasePath,
 				   filter = eldap:equalityMatch("telephoneNumber", "555-12345"),
 				   scope=eldap:singleLevel()}),
-    %% restore the orignal version:
+    %% restore the original version:
     restore_original_object(H, DN, OriginalAttrs).
 
 %%%----------------------------------------------------------------
@@ -1148,3 +1296,13 @@ init_ssl_certs_et_al(Config) ->
 	    ct:log("init_per_suite failed to start ssl Error=~p Reason=~p", [Error, Reason]),
 	    false
     end.
+
+%%%----------------------------------------------------------------
+random_sorted(L) when is_list(L) ->
+    random_sorted(L, length(L), []).
+
+random_sorted([], 0, Acc) -> Acc;
+random_sorted(L, N, Acc) ->
+    R = rand:uniform(N),
+    E = lists:nth(R, L),
+    random_sorted(L -- [E], N-1, [E|Acc]).

@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %% 
-%% Copyright Ericsson AB 1997-2021. All Rights Reserved.
+%% Copyright Ericsson AB 1997-2022. All Rights Reserved.
 %% 
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -76,7 +76,7 @@ start_link(Manager, ConfigDB, AcceptTimeout) ->
 %%
 %% Description: Send a message to the request handler process
 %% confirming that the socket ownership has now sucssesfully been
-%% transfered to it. Intended to be called by the httpd acceptor
+%% transferred to it. Intended to be called by the httpd acceptor
 %% process.
 %%--------------------------------------------------------------------
 socket_ownership_transfered(Pid, SocketType, Socket) ->
@@ -664,7 +664,7 @@ handle_next_request(#state{mod = #mod{connection = true} = ModData,
     TmpState = State#state{mod                    = NewModData,
 			   mfa                    = MFA,
 			   max_keep_alive_request = decrease(Max),
-			   headers                = undefined, 
+			   headers                = #http_request_h{}, 
 			   body                   = undefined,
                            chunk                  = chunk_start(MaxChunk),
 			   response_sent          = false},

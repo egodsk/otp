@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  * 
- * Copyright Ericsson AB 2002-2021. All Rights Reserved.
+ * Copyright Ericsson AB 2002-2022. All Rights Reserved.
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -257,7 +257,6 @@ start_new_child(int pipes[])
         res = read(pipes[0], &proto, sizeof(proto));
         if (res > 0) {
             ASSERT(proto.action == ErtsSysForkerProtoAction_Ack);
-            ASSERT(res == sizeof(proto));
         }
     } while(res < 0 && (errno == EINTR || errno == ERRNO_BLOCK));
 

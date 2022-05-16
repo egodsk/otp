@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2019-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2019-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -20,8 +20,6 @@
 
 %%
 -module(ssl_cert_tests).
-
--behaviour(ct_suite).
 
 -include_lib("public_key/include/public_key.hrl").
 
@@ -87,9 +85,16 @@ auth() ->
      [{doc,"Test connection with mutual authentication"}].
 
 auth(Config) ->
-    ClientOpts = [{verify, verify_peer} | ssl_test_lib:ssl_options(extra_client, client_cert_opts, Config)],
+    Version = proplists:get_value(version,Config),
+    ClientOpts =  case Version of
+                      'tlsv1.3' ->
+                          [{verify, verify_peer},
+                           {certificate_authorities, true} |
+                           ssl_test_lib:ssl_options(extra_client, client_cert_opts, Config)];
+                      _ ->
+                          [{verify, verify_peer} | ssl_test_lib:ssl_options(extra_client, client_cert_opts, Config)]
+                  end,
     ServerOpts =  [{verify, verify_peer} | ssl_test_lib:ssl_options(extra_server, server_cert_opts, Config)],
-    
     ssl_test_lib:basic_test(ClientOpts, ServerOpts, Config).
 
 %%--------------------------------------------------------------------
@@ -127,7 +132,7 @@ client_auth_empty_cert_rejected(Config) ->
     end.
 %%--------------------------------------------------------------------
 client_auth_partial_chain() ->
-    [{doc, "Client sends an incompleate chain, by default not acceptable."}].
+    [{doc, "Client sends an incomplete chain, by default not acceptable."}].
 
 client_auth_partial_chain(Config) when is_list(Config) ->
     ServerOpts = [{verify, verify_peer}, {fail_if_no_peer_cert, true}
@@ -166,7 +171,7 @@ client_auth_allow_partial_chain(Config) when is_list(Config) ->
 
  %%--------------------------------------------------------------------
 client_auth_do_not_allow_partial_chain() ->
-    [{doc, "Server does not accept the chain sent by the client as ROOT CA is unkown, "
+    [{doc, "Server does not accept the chain sent by the client as ROOT CA is unknown, "
       "and we do not choose to trust the intermediate CA. (partial_chain option)"}].
 
 client_auth_do_not_allow_partial_chain(Config) when is_list(Config) ->
@@ -196,9 +201,9 @@ client_auth_partial_chain_fun_fail(Config) when is_list(Config) ->
     {ok, ServerCAs} = file:read_file(proplists:get_value(cacertfile, ServerOpts0)),
     [{_,_,_}, {_, IntermidiateCA, _} | _] = public_key:pem_decode(ServerCAs),
 
-    PartialChain =  fun(_CertChain) ->
-                            true = false %% crash on purpose
-		    end,
+    PartialChain = fun(_CertChain) ->
+                           error(crash_on_purpose)
+                   end,
     ServerOpts = [{cacerts, [IntermidiateCA]},
                   {partial_chain, PartialChain} |
                   proplists:delete(cacertfile, ServerOpts0)],
@@ -252,7 +257,7 @@ client_auth_seelfsigned_peer(Config) when is_list(Config) ->
                                                                      {key, {'RSAPrivateKey', DerKey}}], Config), Config, bad_certificate).
 %%--------------------------------------------------------------------
 missing_root_cert_no_auth() ->
-     [{doc,"Test that the client succeds if the ROOT CA is unknown in verify_none mode"}].
+     [{doc,"Test that the client succeeds if the ROOT CA is unknown in verify_none mode"}].
 
 missing_root_cert_no_auth(Config) ->
     ClientOpts = [{verify, verify_none} | ssl_test_lib:ssl_options(extra_client, client_cert_opts, Config)],

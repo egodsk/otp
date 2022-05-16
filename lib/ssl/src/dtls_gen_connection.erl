@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2020-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2020-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -256,7 +256,7 @@ send_handshake_flight(#state{static_env = #static_env{socket = Socket,
     MaxSize = min(MaxFragmentLength, ?PMTUEstimate),
     {Encoded, ConnectionStates} =
 	encode_handshake_flight(lists:reverse(Flight), Version, MaxSize, Epoch, ConnectionStates0),
-    send_packets(Transport, Socket, Encoded),
+    send_packets(Transport, Socket, MaxSize, Encoded),
     ssl_logger:debug(LogLevel, outbound, 'record', Encoded),
    {State0#state{connection_states = ConnectionStates}, []};
 
@@ -274,7 +274,7 @@ send_handshake_flight(#state{static_env = #static_env{socket = Socket,
     {HsBefore, ConnectionStates1} =
 	encode_handshake_flight(lists:reverse(Flight0), Version, MaxSize, Epoch, ConnectionStates0),
     {EncChangeCipher, ConnectionStates} = encode_change_cipher(ChangeCipher, Version, Epoch, ConnectionStates1),
-    send_packets(Transport, Socket, HsBefore ++ EncChangeCipher),
+    send_packets(Transport, Socket, MaxSize, HsBefore ++ EncChangeCipher),
     ssl_logger:debug(LogLevel, outbound, 'record', [HsBefore]),
     ssl_logger:debug(LogLevel, outbound, 'record', [EncChangeCipher]),
     {State0#state{connection_states = ConnectionStates}, []};
@@ -296,7 +296,7 @@ send_handshake_flight(#state{static_env = #static_env{socket = Socket,
 	encode_change_cipher(ChangeCipher, Version, Epoch-1, ConnectionStates1),
     {HsAfter, ConnectionStates} =
 	encode_handshake_flight(lists:reverse(Flight1), Version, MaxSize, Epoch, ConnectionStates2),
-    send_packets(Transport, Socket, HsBefore ++ EncChangeCipher ++ HsAfter),
+    send_packets(Transport, Socket, MaxSize, HsBefore ++ EncChangeCipher ++ HsAfter),
     ssl_logger:debug(LogLevel, outbound, 'record', [HsBefore]),
     ssl_logger:debug(LogLevel, outbound, 'record', [EncChangeCipher]),
     ssl_logger:debug(LogLevel, outbound, 'record', [HsAfter]),
@@ -317,7 +317,7 @@ send_handshake_flight(#state{static_env = #static_env{socket = Socket,
 	encode_change_cipher(ChangeCipher, Version, Epoch-1, ConnectionStates0),
     {HsAfter, ConnectionStates} =
 	encode_handshake_flight(lists:reverse(Flight1), Version, MaxSize, Epoch, ConnectionStates1),
-    send_packets(Transport, Socket, EncChangeCipher ++ HsAfter),
+    send_packets(Transport, Socket, MaxSize, EncChangeCipher ++ HsAfter),
     ssl_logger:debug(LogLevel, outbound, 'record', [EncChangeCipher]),
     ssl_logger:debug(LogLevel, outbound, 'record', [HsAfter]),
     {State0#state{connection_states = ConnectionStates}, []}.
@@ -482,12 +482,12 @@ send(Transport, {Listener, Socket}, Data) when is_pid(Listener) ->
 send(Transport, Socket, Data) -> % Client socket
     dtls_socket:send(Transport, Socket, Data).
 
-send_packets(_Transport, _Socket, []) ->
+send_packets(_Transport, _Socket, _Max, []) ->
     ok;
-send_packets(Transport, Socket, Packets) ->
-    {Packet, Rest} = pack_packets(Packets, 0, ?PMTUEstimate+80, []),
+send_packets(Transport, Socket, Max, Packets) ->
+    {Packet, Rest} = pack_packets(Packets, 0, Max, []),
     case send(Transport, Socket, Packet) of
-        ok -> send_packets(Transport, Socket, Rest);
+        ok -> send_packets(Transport, Socket, Max, Rest);
         Err -> Err
     end.
 
@@ -551,7 +551,7 @@ handle_info({CloseTag, Socket}, StateName,
                 _ ->
                     %% As invalidate_sessions here causes performance issues,
                     %% we will conform to the widespread implementation
-                    %% practice and go aginst the spec
+                    %% practice and go against the spec
                     %%invalidate_session(Role, Host, Port, Session)
                     ok
             end,
@@ -735,6 +735,6 @@ log_ignore_alert(Level, StateName, #alert{where = Location} = Alert, Role) ->
 
 dtls_version(hello, Version, #state{static_env = #static_env{role = server},
                                     connection_env = CEnv} = State) ->
-    State#state{connection_env = CEnv#connection_env{negotiated_version = Version}}; %%Inital version
+    State#state{connection_env = CEnv#connection_env{negotiated_version = Version}}; %%Initial version
 dtls_version(_,_, State) ->
     State.

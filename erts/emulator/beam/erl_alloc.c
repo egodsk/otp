@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2002-2021. All Rights Reserved.
+ * Copyright Ericsson AB 2002-2022. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -2139,7 +2139,8 @@ alcu_size(ErtsAlcType_t alloc_no, ErtsAlcUFixInfo_t *fi, int fisz)
                     erts_alcu_foreign_size(allctr, alloc_no, &size);
                 }
 
-                ASSERT(((SWord)size.blocks) >= 0);
+                /* Sanity check of block size on 64-bit */
+                ASSERT(sizeof(UWord) == 4 || ((SWord)size.blocks) >= 0);
 
                 res += size.blocks;
             }

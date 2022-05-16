@@ -1,8 +1,8 @@
 %%
 %% %CopyrightBegin%
-%% 
-%% Copyright Ericsson AB 2006-2021. All Rights Reserved.
-%% 
+%%
+%% Copyright Ericsson AB 2006-2022. All Rights Reserved.
+%%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
 %% You may obtain a copy of the License at
@@ -14,7 +14,7 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
-%% 
+%%
 %% %CopyrightEnd%
 %%
 %%
@@ -69,14 +69,14 @@ start(Type) ->
 %%
 %% Note: Dynamically started services will not be handled by
 %% application takeover and failover behavior when inets is run as a
-%% distributed application. Nor will they be automaticly restarted
+%% distributed application. Nor will they be automatically restarted
 %% when the inets application is restarted, but as long as the inets
 %% application is up and running they will be supervised and may be
 %% soft code upgraded. Services started with the option stand alone,
 %% e.i. the service is not started as part of the inets application,
 %% will lose all OTP application benefits such as soft upgrade. The
 %% stand alone service will be linked to the process that started it.
-%% In most cases some of the supervison functionallity will still be
+%% In most cases some of the supervison functionality will still be
 %% in place and in some sense the calling process has now become the
 %% top supervisor.
 %% --------------------------------------------------------------------
@@ -256,11 +256,9 @@ mod_version_info(Mod) ->
     {value, {app_vsn,    AppVsn}} = lists:keysearch(app_vsn,    1, Attr),
     {value, {compile,    Comp}}   = lists:keysearch(compile,    1, Info),
     {value, {version,    Ver}}    = lists:keysearch(version,    1, Comp),
-    {value, {time,       Time}}   = lists:keysearch(time,       1, Comp),
     {Mod, [{vsn,              Vsn},
            {app_vsn,          AppVsn},
-           {compiler_version, Ver},
-           {compile_time,     Time}]}.
+           {compiler_version, Ver}]}.
 
 sys_info() ->
     SysArch = string:strip(erlang:system_info(system_architecture),right,$\n),
@@ -328,22 +326,12 @@ print_mod_info({Module, Info}) ->
             _ ->
                 "Not found"
         end,
-    CompDate =
-        case key1search(compile_time, Info) of
-            {value, {Year, Month, Day, Hour, Min, Sec}} ->
-                lists:flatten(
-                  io_lib:format("~w-~2..0w-~2..0w ~2..0w:~2..0w:~2..0w",
-                                [Year, Month, Day, Hour, Min, Sec]));
-            _ ->
-                "Not found"
-        end,
     io:format("   ~w:~n"
               "      Vsn:          ~s~n"
               "      App vsn:      ~s~n"
               "      ASN.1 vsn:    ~s~n"
-              "      Compiler ver: ~s~n"
-              "      Compile time: ~s~n",
-              [Module, Vsn, AppVsn, Asn1Vsn, CompVer, CompDate]),
+              "      Compiler ver: ~s~n",
+              [Module, Vsn, AppVsn, Asn1Vsn, CompVer]),
     ok.
 
 
@@ -396,7 +384,7 @@ service_names() ->
 %% Note that it starts a tracer server.
 %% When Destination is the atom io (or the tuple {io, Verbosity}),
 %% all (printable) inets trace events (trace_ts events which has
-%% Severity withing Limit) will be written to stdout using io:format.
+%% Severity within Limit) will be written to stdout using io:format.
 %%
 %%-----------------------------------------------------------------
 enable_trace(Level, Dest)          -> inets_trace:enable(Level, Dest).

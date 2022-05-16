@@ -5,7 +5,7 @@
   <header>
     <copyright>
       <year>2008</year>
-      <year>2020</year>
+      <year>2022</year>
       <holder>Ericsson AB, All Rights Reserved</holder>
     </copyright>
     <legalnotice>
@@ -418,6 +418,7 @@
     entries. Notice that if the PEM entry is of type
     'SubjectPublickeyInfo', it is further decoded to an
     <c>rsa_public_key()</c> or <c>dsa_public_key()</c>.</p>
+    <p>Password can be either an octet string or function which returns same type.</p>
   </desc> 
   </func>
 

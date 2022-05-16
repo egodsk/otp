@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 1999-2021. All Rights Reserved.
+%% Copyright Ericsson AB 1999-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -1959,7 +1959,7 @@ pat_segment({bin_element,L,Val,Size0,Type0}, St) ->
     [Type,{unit,Unit}|Flags] = Type1,
     Anno = lineno_anno(L, St),
     {Pval0,St1} = pattern(Val, St),
-    Pval = coerce_to_float(Pval0, Type0),
+    Pval = coerce_to_float(Pval0, Type),
     Size = erl_eval:partial_eval(Size1),
     {Psize,St2} = exprs([Size], St1),
     {#ibitstr{anno=#a{anno=Anno},
@@ -1968,7 +1968,7 @@ pat_segment({bin_element,L,Val,Size0,Type0}, St) ->
               type=#c_literal{val=Type},
               flags=#c_literal{val=Flags}},St2}.
 
-coerce_to_float(#c_literal{val=Int}=E, [float|_]) when is_integer(Int) ->
+coerce_to_float(#c_literal{val=Int}=E, float) when is_integer(Int) ->
     try
 	E#c_literal{val=float(Int)}
     catch

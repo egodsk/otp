@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2020-2021. All Rights Reserved.
+ * Copyright Ericsson AB 2020-2022. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -155,7 +155,7 @@ static JitAllocator *pick_allocator() {
     JitAllocator::CreateParams dual_params;
 
     dual_params.reset();
-    dual_params.options = JitAllocator::kOptionUseDualMapping,
+    dual_params.options = JitAllocatorOptions::kUseDualMapping,
     dual_params.blockSize = 4 << 20;
 
     if (auto *alloc = create_allocator(&dual_params)) {

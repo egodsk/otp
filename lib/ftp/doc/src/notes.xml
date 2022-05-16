@@ -4,7 +4,7 @@
 <chapter>
   <header>
     <copyright>
-      <year>2002</year><year>2018</year>
+      <year>2002</year><year>2021</year>
       <holder>Ericsson AB. All Rights Reserved.</holder>
     </copyright>
     <legalnotice>
@@ -33,7 +33,25 @@
     <file>notes.xml</file>
   </header>
   
-  <section><title>Ftp 1.1</title>
+  <section><title>Ftp 1.1.1</title>
+
+    <section><title>Fixed Bugs and Malfunctions</title>
+      <list>
+        <item>
+          <p>
+	    An unexpected timeout message on the FTP control channel
+	    was observed in a real system and could not be associated
+	    with anything that was expected to happen, so we will
+	    ignore but info log such unexpected messages.</p>
+          <p>
+	    Own Id: OTP-17989 Aux Id: ERIERL-767 </p>
+        </item>
+      </list>
+    </section>
+
+</section>
+
+<section><title>Ftp 1.1</title>
 
     <section><title>Fixed Bugs and Malfunctions</title>
       <list>

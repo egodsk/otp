@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2011-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2011-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -315,10 +315,10 @@ accept_one(Driver, Kernel, Socket) ->
 %% {verify_fun,{fun ?MODULE:verify_client/3,_}} is used
 %% as a configuration marker that verify_client/3 shall be used.
 %%
-%% Replace the State in the first occurence of
+%% Replace the State in the first occurrence of
 %% {verify_fun,{fun ?MODULE:verify_client/3,State}}
 %% and remove the rest.
-%% The inserted state is not accesible from a configuration file
+%% The inserted state is not accessible from a configuration file
 %% since it is dynamic and connection dependent.
 %%
 setup_verify_client(Socket, Opts) ->
@@ -444,8 +444,10 @@ gen_accept_connection(
 
 do_accept(
   _Driver, AcceptPid, DistCtrl, MyNode, Allowed, SetupTime, Kernel) ->
+    MRef = erlang:monitor(process, AcceptPid),
     receive
 	{AcceptPid, controller} ->
+            erlang:demonitor(MRef, [flush]),
             {ok, SslSocket} = tls_sender:dist_tls_socket(DistCtrl),
 	    Timer = dist_util:start_timer(SetupTime),
             NewAllowed = allowed_nodes(SslSocket, Allowed),
@@ -463,6 +465,11 @@ do_accept(
         {AcceptPid, exit} ->
             %% this can happen when connection was initiated, but dropped
             %%  between TLS handshake completion and dist handshake start
+            ?shutdown2(MyNode, connection_setup_failed);
+        {'DOWN', MRef, _, _, _Reason} ->
+            %% this may happen when connection was initiated, but dropped
+            %% due to crash propagated from other handshake process which
+            %% failed on inet_tcp:accept (see GH-5332)
             ?shutdown2(MyNode, connection_setup_failed)
     end.
 

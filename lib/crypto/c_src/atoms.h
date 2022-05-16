@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2010-2020. All Rights Reserved.
+ * Copyright Ericsson AB 2010-2022. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -143,6 +143,6 @@ extern ERL_NIF_TERM atom_key_id;
 extern ERL_NIF_TERM atom_password;
 #endif
 
-int init_atoms(ErlNifEnv *env, const ERL_NIF_TERM fips_mode, const ERL_NIF_TERM load_info);
+int init_atoms(ErlNifEnv *env);
 
 #endif /* E_ATOMS_H__ */

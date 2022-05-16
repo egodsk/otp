@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2005-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2005-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -220,6 +220,16 @@ int_float(Config) when is_list(Config) ->
     %% OTP-5323
     <<103133.0:64/float>> = <<103133:64/float>>,
     <<103133:64/float>> = <<103133:64/float>>,
+
+    %% Must work with type and flags in either order.
+    NativeFortyTwo = id(<<42/native-float>>),
+    <<42/float-native>> = NativeFortyTwo,
+    <<42/native-float>> = NativeFortyTwo,
+
+    %% Must work with redundant flags.
+    SixtyFour = id(<<64/float>>),
+    <<64/unsigned-float>> = SixtyFour,
+    <<64/float-unsigned>> = SixtyFour,
 
     %% Coverage of error cases in sys_pre_expand:coerce_to_float/2.
     case id(default) of

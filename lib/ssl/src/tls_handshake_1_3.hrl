@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2018-2020. All Rights Reserved.
+%% Copyright Ericsson AB 2018-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
 %%
 %%
 %%----------------------------------------------------------------------
-%% Purpose: Record and constant defenitions for the TLS-handshake protocol
+%% Purpose: Record and constant definitions for the TLS-handshake protocol
 %% see RFC 8446. Also includes supported hello extensions.
 %%----------------------------------------------------------------------
 
@@ -27,7 +27,7 @@
 -define(tls_handshake_1_3, true).
 
 %% Common to TLS-1.3 and previous TLS versions 
-%% Some defenitions may not exist in TLS-1.3 this is 
+%% Some definitions may not exist in TLS-1.3 this is 
 %% handled elsewhere
 -include("tls_handshake.hrl"). 
 
@@ -179,7 +179,7 @@
 
 %%  RFC 8446 B.3.2 Server Parameters Messages
 %%  opaque DistinguishedName<1..2^16-1>;XS
--record(certificate_authoritie_sextension, {
+-record(certificate_authorities, {
           authorities  %DistinguishedName authorities<3..2^16-1>;
          }).
 

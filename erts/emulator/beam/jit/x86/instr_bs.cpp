@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2020-2021. All Rights Reserved.
+ * Copyright Ericsson AB 2020-2022. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -761,7 +761,7 @@ void BeamModuleAssembler::emit_i_bs_get_integer_16(const ArgVal &Ctx,
             a.movzx(RET, address);
         }
     } else {
-        if (hasCpuFeature(x86::Features::kMOVBE)) {
+        if (hasCpuFeature(CpuFeatures::X86::kMOVBE)) {
             a.movbe(x86::ax, address);
         } else {
             a.mov(x86::ax, address);
@@ -805,7 +805,7 @@ void BeamModuleAssembler::emit_i_bs_get_integer_32(const ArgVal &Ctx,
             a.mov(RETd, address);
         }
     } else {
-        if (hasCpuFeature(x86::Features::kMOVBE)) {
+        if (hasCpuFeature(CpuFeatures::X86::kMOVBE)) {
             a.movbe(RETd, address);
         } else {
             a.mov(RETd, address);
@@ -847,7 +847,7 @@ void BeamModuleAssembler::emit_i_bs_get_integer_64(const ArgVal &Ctx,
     if (flags & BSF_LITTLE) {
         a.mov(RET, address);
     } else {
-        if (hasCpuFeature(x86::Features::kMOVBE)) {
+        if (hasCpuFeature(CpuFeatures::X86::kMOVBE)) {
             a.movbe(RET, address);
         } else {
             a.mov(RET, address);

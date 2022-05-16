@@ -1,7 +1,7 @@
 %%
 %% %CopyrightBegin%
 %%
-%% Copyright Ericsson AB 2019-2021. All Rights Reserved.
+%% Copyright Ericsson AB 2019-2022. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -108,7 +108,7 @@ connect(Address, Port, Opts, Timeout) ->
 %% Helpers -------
 
 connect_lookup(Address, Port, Opts, Timer) ->
-    Opts_1 = normalize_setopts(Opts),
+    Opts_1 = internalize_setopts(Opts),
     {Mod, Opts_2} = inet:tcp_module(Opts_1, Address),
     Domain = domain(Mod),
     {StartOpts, Opts_3} = split_start_opts(Opts_2),
@@ -250,7 +250,7 @@ default_active_true(Opts) ->
 %% -------------------------------------------------------------------------
 
 listen(Port, Opts) ->
-    Opts_1 = normalize_setopts(Opts),
+    Opts_1 = internalize_setopts(Opts),
     {Mod, Opts_2} = inet:tcp_module(Opts_1),
     {StartOpts, Opts_3} = split_start_opts(Opts_2),
     case Mod:getserv(Port) of
@@ -351,13 +351,12 @@ send(?MODULE_socket(Server, Socket), Data) ->
                     Size = iolist_size(Data),
 		    %% ?DBG([{packet, Packet}, {data_size, Size}]),
                     Header = <<?header(Packet, Size)>>,
-                    Result =
-                        socket_send(Socket, [Header, Data], SendTimeout),
-                    send_result(Server, Meta, Result);
-
+                    Header_Data = [Header, Data],
+                    Result = socket_send(Socket, Header_Data, SendTimeout),
+                    send_result(Server, Header_Data, Meta, Result);
                 true ->
                     Result = socket_send(Socket, Data, SendTimeout),
-                    send_result(Server, Meta, Result)
+                    send_result(Server, Data, Meta, Result)
             end;
         {ok, _BadMeta} ->
             exit(badarg);
@@ -365,43 +364,51 @@ send(?MODULE_socket(Server, Socket), Data) ->
             Error
     end.
 %%
-send_result(Server, Meta, Result) ->
+send_result(Server, Data, Meta, Result) ->
     %% ?DBG([{meta, Meta}, {send_result, Result}]),
     case Result of
-	%% We should really return the rest data rather then just ignoring it.
-	%% In the case we get a timeout when sending and 'send_timeout_close'
-	%% is set true, we close the connection and only return the timeout.
-	%% Otherwise we return the full error.
-        {error, {timeout = Reason, RestData}} = E when is_binary(RestData) ->
-	    case maps:get(send_timeout_close, Meta) of
-		true ->
-		    close_server(Server),
-		    {error, Reason};
-		false ->
-		    E
-	    end;
         {error, Reason} ->
-            %% To handle RestData we would have to pass
-            %% all writes through a single process that buffers
-            %% the write data, which would be a bottleneck
-            %%
-            %% Since send data may have been lost, and there is no room
-            %% in this API to inform the caller, we at least close
-            %% the socket in the write direction
-            %%
             %% ?DBG(Result),
             case Reason of
                 econnreset ->
                     case maps:get(show_econnreset, Meta) of
-                        true  -> {error, econnreset};
+                        true  -> Result;
                         false -> {error, closed}
                     end;
+                {timeout = R, RestData} when is_binary(RestData) ->
+                    %% To handle RestData we would have to pass
+                    %% all writes through a single process that buffers
+                    %% the write data, which would be a bottleneck.
+                    %%
+                    %% For send_timeout_close we have to waste RestData.
+                    %%
+                    case maps:get(send_timeout_close, Meta) of
+                        true ->
+                            close_server(Server),
+                            {error, R};
+                        false ->
+                            Result
+                    end;
                 timeout ->
-                    _ = maps:get(send_timeout_close, Meta)
-                        andalso close_server(Server),
-                    {error, Reason};
+                    %% No data was sent.
+                    %%
+                    %% Return all data to the user as RestData.
+                    %% For packet modes (inserted header);
+                    %% the user will have to switch to raw packet
+                    %% mode to retransmit RestData since at least
+                    %% part of the packet header has been transmitted
+                    %% and inserting a new packet header into the
+                    %% stream would be dead wrong.
+                    %%
+                    case maps:get(send_timeout_close, Meta) of
+                        true ->
+                            close_server(Server),
+                            Result;
+                        false ->
+                            {error, {Reason, iolist_to_binary(Data)}}
+                    end;
                 _ ->
-                    ?badarg_exit({error, Reason})
+                    ?badarg_exit(Result)
             end;
         ok ->
             ok
@@ -522,14 +529,14 @@ cancel_monitor(MRef) ->
 %% -------------------------------------------------------------------------
 
 setopts(?MODULE_socket(Server, _Socket), Opts) when is_list(Opts) ->
-    call(Server, {setopts, normalize_setopts(Opts)}).
+    call(Server, {setopts, internalize_setopts(Opts)}).
 
 
 
 %% -------------------------------------------------------------------------
 
 getopts(?MODULE_socket(Server, _Socket), Opts) when is_list(Opts) ->
-    call(Server, {getopts, normalize_getopts(Opts)}).
+    call(Server, {getopts, internalize_getopts(Opts)}).
 
 
 %% -------------------------------------------------------------------------
@@ -628,7 +635,7 @@ unrecv(?MODULE_socket(_Server, _Socket), _Data) ->
     {error, enotsup}.
 
 fdopen(Fd, Opts) when is_integer(Fd), 0 =< Fd, is_list(Opts) ->
-    Opts_1 = normalize_setopts(Opts),
+    Opts_1 = internalize_setopts(Opts),
     {Mod, Opts_2} = inet:tcp_module(Opts_1),
     Domain = domain(Mod),
     {StartOpts, Opts_3} = split_start_opts(Opts_2),
@@ -791,7 +798,7 @@ sockaddrs([IP | IPs], TP, Domain) ->
 %% Reject all other terms by exit(badarg).
 %%
 
-normalize_setopts(Opts) ->
+internalize_setopts(Opts) ->
     [case Opt of
          binary                     -> {mode, binary};
          list                       -> {mode, list};
@@ -804,14 +811,21 @@ normalize_setopts(Opts) ->
             exit(badarg)
      end || Opt <- Opts].
 
-normalize_getopts(Opts) ->
+internalize_getopts(Opts) ->
     [case Opt of
-         Tag when is_atom(Tag)    -> Opt;
-         {raw, _}                 -> Opt;
-         {raw, Level, Key, Value} -> {raw, {Level, Key, Value}};
-         _                        -> exit(badarg)
+         Tag when is_atom(Tag)        -> Opt;
+         {raw, _}                     -> Opt;
+         {raw, Level, Key, ValueSpec} -> {raw, {Level, Key, ValueSpec}};
+         _                            -> exit(badarg)
      end || Opt <- Opts].
 
+externalize_getopts(Opts) ->
+    [case Opt of
+         {raw, {Level, Key, Value}} -> {raw, Level, Key, Value};
+         {Tag, _} when is_atom(Tag) -> Opt;
+         _                          -> exit(badarg)
+     end || Opt <- Opts].
+ 
 %%
 %% -------
 %% Split options into server start options and other options.
@@ -907,7 +921,12 @@ socket_setopt_value(_Opt, Value) -> Value.
 socket_getopt(Socket, raw, Val) ->
     case Val of
         {Level, Key, ValueSpec} ->
-            socket:getopt_native(Socket, {Level,Key}, ValueSpec);
+            case socket:getopt_native(Socket, {Level,Key}, ValueSpec) of
+                {ok, Value} ->
+                    {ok, {Level, Key, Value}};
+                {error, _} = ERROR ->
+                    ERROR
+            end;
         _ ->
             {error, einval}
     end;
@@ -1410,7 +1429,12 @@ handle_event({call, From}, close, State, {P, D} = P_D) ->
 %% Call: getopts/1
 handle_event({call, From}, {getopts, Opts}, State, {P, D}) ->
     %% ?DBG({call, getopts, Opts, State, D}),
-    Result = state_getopts(P, D, State, Opts),
+    Result = case state_getopts(P, D, State, Opts) of
+                 {ok, OptVals} ->
+                     {ok, externalize_getopts(OptVals)};
+                 {error, _} = ERROR ->
+                     ERROR
+             end,
     %% ?DBG({call, getopts_result, Result}),
     {keep_state_and_data,
      [{reply, From, Result}]};
@@ -1694,9 +1718,19 @@ handle_event(Type, Content, State, P_D) ->
 %% Event handler helpers
 
 
-%% We only accept/perform shutdown when socket is 'connected'.
+%% We only accept/perform shutdown when socket is 'connected'
+%% We only accept/perform shutdown when socket is 'connected'
+%% (or closed_read | closed_write).
 %% This is done to be "compatible" with the inet-driver!
 
+handle_shutdown(#params{socket = Socket},
+                closed_write = _State,
+                read = How) ->
+    handle_shutdown2(Socket, closed_read_write, How);
+handle_shutdown(#params{socket = Socket},
+                closed_read = _State,
+                write = How) ->
+    handle_shutdown2(Socket, closed_read_write, How);
 handle_shutdown(#params{socket = Socket},
                 connected = _State,
                 write = How) ->
@@ -2611,7 +2645,7 @@ state_getopts(P, D, State, [Tag | Tags], Acc) ->
                     %% ?DBG({'socket getopt', Tag}),
                     case
                         socket_getopt(
-                          Socket, maps:get(Tag, SocketOpts), Val)
+                          Socket, maps:get(Key, SocketOpts), Val)
                     of
                         {ok, Value} ->
                             %% ?DBG({'socket getopt', ok, Value}),

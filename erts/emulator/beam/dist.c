@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 1996-2021. All Rights Reserved.
+ * Copyright Ericsson AB 1996-2022. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -964,6 +964,19 @@ int erts_do_net_exits(DistEntry *dep, Eterm reason)
 
             if (erts_port_task_is_scheduled(&dep->dist_cmd))
                 erts_port_task_abort(&dep->dist_cmd);
+        }
+        else {
+            ASSERT(is_internal_pid(dep->cid));
+            /*
+             * Supervised distribution controllers may exit "normally" with
+             * {shutdown,Reason}. Unwrap such shutdown tuple to get a correct
+             * documented 'nodedown_reason' from net_kernel:montitor_nodes.
+             */
+            if (is_tuple_arity(reason, 2)) {
+                Eterm* tpl = tuple_val(reason);
+                if (tpl[1] == am_shutdown)
+                    reason = tpl[2];
+            }
         }
 
 	if (dep->state == ERTS_DE_STATE_EXITING) {
@@ -3370,6 +3383,7 @@ erts_dsig_send(ErtsDSigSendContext *ctx)
 		    erts_mtx_unlock(&dep->qlock);
 
 		    plp = erts_proclist_create(ctx->c_p);
+
 		    erts_suspend(ctx->c_p, ERTS_PROC_LOCK_MAIN, NULL);
 		    suspended = 1;
 		    erts_mtx_lock(&dep->qlock);
@@ -3440,12 +3454,15 @@ erts_dsig_send(ErtsDSigSendContext *ctx)
 		}
                 /* More fragments left to be sent, yield and re-schedule */
                 if (ctx->fragments) {
+                    ctx->c_p->flags |= F_FRAGMENTED_SEND;
                     retval = ERTS_DSIG_SEND_CONTINUE;
                     if (!resume && erts_system_monitor_flags.busy_dist_port)
                         monitor_generic(ctx->c_p, am_busy_dist_port, cid);
                     goto done;
                 }
 	    }
+
+            if (ctx->c_p) ctx->c_p->flags &= ~F_FRAGMENTED_SEND;
 	    ctx->obuf = NULL;
 
 	    if (suspended) {
@@ -3829,9 +3846,8 @@ erts_dist_command(Port *prt, int initial_reds)
 	obufsize = 0;
 	if (!(sched_flags & ERTS_PTS_FLG_BUSY_PORT)
 	    && de_busy && qsize < erts_dist_buf_busy_limit) {
-	    ErtsProcList *suspendees;
 	    int resumed;
-	    suspendees = get_suspended_on_de(dep, ERTS_DE_QFLG_BUSY);
+	    ErtsProcList *suspendees = get_suspended_on_de(dep, ERTS_DE_QFLG_BUSY);
 	    erts_mtx_unlock(&dep->qlock);
 
 	    resumed = erts_resume_processes(suspendees);

@@ -1,7 +1,7 @@
 /*
  * %CopyrightBegin%
  *
- * Copyright Ericsson AB 2002-2021. All Rights Reserved.
+ * Copyright Ericsson AB 2002-2022. All Rights Reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1897,7 +1897,7 @@ erts_mremap(ErtsMemMapper* mm,
 #endif
 #ifdef ERTS_HAVE_OS_MREMAP
 	if (superaligned) {
-	    return remap_move(mm, flags, new_ptr, old_size, sizep);
+	    return remap_move(mm, flags, ptr, old_size, sizep);
 	} else {
 	    new_ptr = os_mremap(ptr, old_size, asize, 0);
 	    if (!new_ptr)
