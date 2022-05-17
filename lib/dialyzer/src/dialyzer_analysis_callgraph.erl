@@ -375,27 +375,31 @@ add_to_result(File, NewData, {Failed, Mods}, InitData) ->
     {error, Reason} ->
       {[{File, Reason} | Failed], Mods};
     {ok, V, InitEdges, Mod} ->
-      HandleCallExistsPred =
-        fun(V1) ->
-          case V1 of
-            {_M, handle_call, 3} -> true;
-            _ -> false
-          end
-        end,
-      E1 = case lists:any(HandleCallExistsPred, V) of
-            true -> add_genserver_handle_call_edges(InitEdges, []);
-            _ -> InitEdges
-          end,
-      HandleCastExistsPred =
-        fun(V1) ->
-          case V1 of
-            {_M, handle_cast, 2} -> true;
-            _ -> false
-          end
-        end,
-      E = case lists:any(HandleCastExistsPred, V) of
-            true -> add_genserver_handle_cast_edges(E1, []);
-            _ -> E1
+      E = case dialyzer_callgraph:get_gen_server_detection(InitData#compile_init.callgraph) of
+            true ->
+              HandleCallExistsPred =
+                fun(V1) ->
+                  case V1 of
+                    {_M, handle_call, 3} -> true;
+                    _ -> false
+                  end
+                end,
+              E1 = case lists:any(HandleCallExistsPred, V) of
+                     true -> add_genserver_handle_call_edges(InitEdges, []);
+                     _ -> InitEdges
+                   end,
+              HandleCastExistsPred =
+                fun(V1) ->
+                  case V1 of
+                    {_M, handle_cast, 2} -> true;
+                    _ -> false
+                  end
+                end,
+              case lists:any(HandleCastExistsPred, V) of
+                true -> add_genserver_handle_cast_edges(E1, []);
+                _ -> E1
+              end;
+            false -> InitEdges
           end,
       Callgraph = InitData#compile_init.callgraph,
       dialyzer_callgraph:add_edges(E, V, Callgraph),
