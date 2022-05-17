@@ -327,7 +327,7 @@ traverse_scc([{M,_,_}=MFA|Left], Codeserver, DefSet, AccState) ->
             end
                             end,
           GroupBy = fun(F, L) ->
-            lists:foldr(fun({K, V}, D) -> dict:append(K, V, D) end, dict:new(), [{F(X), X} || X <- L]) end,
+            lists:foldl(fun({K, V}, D) -> dict:append(K, V, D) end, dict:new(), [{F(X), X} || X <- L]) end,
 
           {CVar, {CFun1, CFun2, CFun3, {CCase1, CCase2, CCase3, CClauses}}} = Def,
           Dict = GroupBy(GroupByFunction, CClauses),
