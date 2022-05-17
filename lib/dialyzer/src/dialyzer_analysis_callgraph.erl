@@ -375,7 +375,7 @@ add_to_result(File, NewData, {Failed, Mods}, InitData) ->
     {error, Reason} ->
       {[{File, Reason} | Failed], Mods};
     {ok, V, InitEdges, Mod} ->
-      E = case dialyzer_callgraph:get_gen_server_detection(InitData#compile_init.callgraph) of
+      E = case ordsets:is_element(?WARN_GEN_SERVER, InitData#compile_init.legal_warnings) of
             true ->
               HandleCallExistsPred =
                 fun(V1) ->
@@ -399,7 +399,8 @@ add_to_result(File, NewData, {Failed, Mods}, InitData) ->
                 true -> add_genserver_handle_cast_edges(E1, []);
                 _ -> E1
               end;
-            false -> InitEdges
+            false ->
+              InitEdges
           end,
       Callgraph = InitData#compile_init.callgraph,
       dialyzer_callgraph:add_edges(E, V, Callgraph),
