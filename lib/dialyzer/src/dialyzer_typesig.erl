@@ -1166,13 +1166,16 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
                   end,
 
                 % _Tag will probably also be either tuple or tuple_set. Both needs to be handled
-                {_C, Tag, ContractReturnType, _Qualifier} = get_contract_return(C#contract{args = NewGenArgs}, ArgTypes),
-                CRet =
-                  case Tag of
-                    tuple -> get_tuple_return_type(ContractReturnType);
-                    tuple_set -> get_tuple_set_return_type(ContractReturnType);
-                    _ -> any
-                  end,
+                CRet = case get_contract_return(C#contract{args = NewGenArgs}, ArgTypes) of
+                         {_C, Tag, ContractReturnType, _Qualifier} -> case Tag of
+                                                                        tuple ->
+                                                                          get_tuple_return_type(ContractReturnType);
+                                                                        tuple_set ->
+                                                                          get_tuple_set_return_type(ContractReturnType);
+                                                                        _ -> any
+                                                                      end;
+                         _ -> any
+                       end,
                 t_inf(CRet, ReturnTypes)
               end, ArgVars
             ),
