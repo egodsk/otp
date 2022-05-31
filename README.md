@@ -113,3 +113,4 @@ You can find more projects, tools and articles related to Erlang/OTP on the [awe
 ```dialyzer --build_plt --output_plt ./plt/test.plt --apps erts kernel stdlib mnesia crypto compiler wx syntax_tools```
 
 ```dialyzer --plt ./plt/test.plt -r -DVSN="\"v1234\"" --src ./lib/dialyzer/src```
+
