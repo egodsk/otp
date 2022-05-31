@@ -32,7 +32,7 @@
         t_subtract/2, t_subtract_list/2, t_sup/1, t_sup/2,t_unify/2]).
 
 -import(erl_types,
-	[t_any/0, t_atom/0, t_atom_vals/1,
+	[t_any/0, t_atom/0, t_atom/1, t_atom_vals/1,
 	 t_binary/0, t_bitstr/0, t_bitstr/2, t_bitstr_concat/1, t_boolean/0,
 	 t_collect_vars/1, t_cons/2, t_cons_hd/1, t_cons_tl/1,
 	 t_float/0, t_from_range/2, t_from_term/1,
@@ -52,7 +52,8 @@
 	 t_timeout/0, t_tuple/0, t_tuple/1,
          t_var/1, t_var_name/1,
 	 t_none/0, t_unit/0,
-	 t_map/0, t_map/1, t_map_get/2, t_map_put/2
+	 t_map/0, t_map/1, t_map_get/2, t_map_put/2,
+      get_tag/1, get_elements/1
      ]).
 
 -include("dialyzer.hrl").
@@ -1000,7 +1001,7 @@ get_plt_constr_gen_server_handle_cast(InputMFA, Dst, ArgVars, State) ->
       get_plt_constr_contract(InputMFA, Dst, ArgVars, State, Plt, PltRes, SCCMFAs);
     {value, {_ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
       [InputTypes, _] = InputTypesWrapper,
-      ReturnTypes = {c,atom,[ok],unknown},
+      ReturnTypes = t_atom(ok),
       GenServerInput = [any, InputTypes],
 
       Contract =
@@ -1024,7 +1025,7 @@ get_plt_constr_gen_server_handle_cast(InputMFA, Dst, ArgVars, State) ->
           {RetType, ArgCs} = {
             ?mk_fun_var(
               fun(_Map) ->
-                CRet = {c,atom,[ok],unknown},
+                CRet = t_atom(ok),
                 t_inf(CRet, ReturnTypes)
               end, ArgVars
             ),
@@ -1048,13 +1049,26 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
   %% INCREMENT CALL
   dialyzer_statistics:typesig_increment_call_arity_lookup(),
   [_Pid, InputType | _Rest] = ArgVars,
-  LookupTypeTemp = case InputType of
-           {c, atom, [Atom], _} ->
-             ?log("[TYPESIG(~p)]: Plt lookup with atom only for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, 1}], State),
-             dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, 1});
-           {c, tuple, [{c, atom, [Atom], _} | _] = InputList, _} ->
-             ?log("[TYPESIG(~p)]: Plt lookup with atom and arity for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, length(InputList)}], State),
-             dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
+  LookupTypeTemp = case get_tag(InputType) of
+           atom ->
+             case length(get_elements(InputType)) of
+               1 ->
+                 [Atom] = get_elements(InputType),
+                 ?log("[TYPESIG(~p)]: Plt lookup with atom only for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, 1}], State),
+                 dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, 1});
+               _ ->
+                 ?log("[TYPESIG(~p)]: Plt lookup unknown type: ~n~p~n~n", [_UniqueId, InputType], State),
+                 none
+             end;
+           tuple ->
+             case get_elements(InputType) of
+               [{c, atom, [Atom], _} | _] = InputList ->
+                 ?log("[TYPESIG(~p)]: Plt lookup with atom and arity for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, length(InputList)}], State),
+                 dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
+               _ ->
+                 ?log("[TYPESIG(~p)]: Plt lookup unknown type: ~n~p~n~n", [_UniqueId, InputType], State),
+                 none
+             end;
            _ ->
              ?log("[TYPESIG(~p)]: Plt lookup unknown type: ~n~p~n~n", [_UniqueId, InputType], State),
              none
@@ -1069,14 +1083,15 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
       %% INCREMENT CALL_MFA
       dialyzer_statistics:typesig_increment_call_mfa_lookup(),
       dialyzer_plt:lookup(Plt, HandleCallMFA);
-    {value, {none, _}} ->
-      ?log("[TYPESIG(~p)]: The known bug with none was encountered!~n~n", [_UniqueId], State),
-      ?log("[TYPESIG(~p)]: Plt lookup for: ~n~p~n~n", [_UniqueId, HandleCallMFA], State),
-      %% INCREMENT CALL_MFA + INCREMENT KNOWN_NONE_BUG
-      dialyzer_statistics:typesig_increment_call_mfa_lookup(),
-      dialyzer_statistics:typesig_increment_known_bug(),
-
-      dialyzer_plt:lookup(Plt, HandleCallMFA);
+%% OLD CODE! Dialyzer says no more
+%%    {value, {none, _}} ->
+%%      ?log("[TYPESIG(~p)]: The known bug with none was encountered!~n~n", [_UniqueId], State),
+%%      ?log("[TYPESIG(~p)]: Plt lookup for: ~n~p~n~n", [_UniqueId, HandleCallMFA], State),
+%%      %% INCREMENT CALL_MFA + INCREMENT KNOWN_NONE_BUG
+%%      dialyzer_statistics:typesig_increment_call_mfa_lookup(),
+%%      dialyzer_statistics:typesig_increment_known_bug(),
+%%
+%%      dialyzer_plt:lookup(Plt, HandleCallMFA);
     T ->
       % handle_call with arity found in Plt
       ?log("[TYPESIG(~p)]: Lookup type found for Plt lookup with arity~n~n", [_UniqueId], State),
@@ -1107,13 +1122,14 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
       % If handle_call returns only a single type then it is a tuple
       % If handle_call returns multiple different types then it is a tuple_set
       % ReturnTypesWrapper --> either a single tuple or a list of tuples (tuple_set)
-      ReturnTypes = case ReturnTypesWrapperWrapper of
-                      {_, ReturnTypeTag, ReturnTypesWrapper, _} ->
-                        case ReturnTypeTag of
-                          tuple -> get_tuple_return_type(ReturnTypesWrapper);
-                          tuple_set -> get_tuple_set_return_type(ReturnTypesWrapper);
-                          _ -> any
-                        end;
+      ReturnTypes = case get_tag(ReturnTypesWrapperWrapper) of
+                      tuple ->
+                        Elems = get_elements(ReturnTypesWrapperWrapper),
+                        get_tuple_return_type(Elems);
+                      tuple_set ->
+                        Elems = get_elements(ReturnTypesWrapperWrapper),
+                        get_tuple_set_return_type(Elems);
+                      any -> any;
                       _ -> any
                     end,
 
@@ -1165,15 +1181,12 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
                     [_, RequestType1, _] -> [RequestType1, any, any]
                   end,
 
-                % _Tag will probably also be either tuple or tuple_set. Both needs to be handled
-                CRet = case get_contract_return(C#contract{args = NewGenArgs}, ArgTypes) of
-                         {_C, Tag, ContractReturnType, _Qualifier} -> case Tag of
-                                                                        tuple ->
-                                                                          get_tuple_return_type(ContractReturnType);
-                                                                        tuple_set ->
-                                                                          get_tuple_set_return_type(ContractReturnType);
-                                                                        _ -> any
-                                                                      end;
+                ContractReturn = get_contract_return(C#contract{args = NewGenArgs}, ArgTypes),
+                CRet = case get_tag(ContractReturn) of
+                         tuple ->
+                           get_tuple_return_type(get_elements(ContractReturn));
+                         tuple_set ->
+                           get_tuple_set_return_type(get_elements(ContractReturn));
                          _ -> any
                        end,
                 t_inf(CRet, ReturnTypes)

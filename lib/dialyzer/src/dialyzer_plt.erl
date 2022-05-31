@@ -172,8 +172,9 @@ lookup_callbacks(#plt{callbacks = ETSCallbacks}, Mod) when is_atom(Mod) ->
   ets_table_lookup(ETSCallbacks, Mod).
 
 -type ret_args_types() :: {erl_types:erl_type(), [erl_types:erl_type()]}.
+-type mfaaa() :: {any(), any(), any(), any(), any()}.
 
--spec insert_list(plt(), [{mfa() | integer(), ret_args_types()}]) -> plt().
+-spec insert_list(plt(), [{mfa() | integer() | mfaaa(), ret_args_types()}]) -> plt().
 
 insert_list(#plt{info = Info} = PLT, List) ->
   true = ets:insert(Info, List),

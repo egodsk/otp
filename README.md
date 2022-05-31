@@ -108,3 +108,8 @@ You can find more projects, tools and articles related to Erlang/OTP on the [awe
 ```./configure --prefix=$(pwd)/output --with-ssl=$(brew --prefix openssl)```
 ```make```
 ```make install```
+
+## Running dialyzer on dialyzer
+```dialyzer --build_plt --output_plt ./plt/test.plt --apps erts kernel stdlib mnesia crypto compiler wx syntax_tools```
+
+```dialyzer --plt ./plt/test.plt -r -DVSN="\"v1234\"" --src ./lib/dialyzer/src```

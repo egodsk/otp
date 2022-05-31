@@ -218,7 +218,8 @@
 	 is_erl_type/1,
 	 atom_to_string/1,
 	 var_table__new/0,
-	 cache__new/0
+	 cache__new/0,
+  get_tag/1, get_elements/1
 	]).
 
 -compile({no_auto_import,[min/2,max/2,map_get/2]}).
@@ -428,6 +429,19 @@ t_none() ->
 
 t_is_none(?none) -> true;
 t_is_none(_) -> false.
+
+-spec get_tag(any()) -> any().
+get_tag(?atom(_)) -> ?atom_tag;
+get_tag(?tuple(_, _, _)) -> ?tuple_tag;
+get_tag(?tuple_set(_)) -> ?tuple_set_tag;
+get_tag(#c{}) -> any;
+get_tag(_) -> none.
+
+-spec get_elements(any()) -> any().
+get_elements(?atom(Elems)) -> Elems;
+get_elements(?tuple(Elems, _, _)) -> Elems;
+get_elements(?tuple_set(Elems)) -> Elems;
+get_elements(_) -> [].
 
 %%-----------------------------------------------------------------------------
 %% Opaque types

@@ -64,7 +64,7 @@
 	 t_tuple/0, t_tuple/1, t_tuple_args/1, t_tuple_args/2,
          t_tuple_subtypes/2,
 	 t_unit/0, t_unopaque/2,
-	 t_map/0, t_map/1, t_is_singleton/2
+	 t_map/0, t_map/1, t_is_singleton/2, get_tag/1, get_elements/1
      ]).
 
 % Add gen_server logging
@@ -421,15 +421,17 @@ contract_return_type({M, call, _} = MFA, C, #state{callgraph = Callgraph}) when 
             [_, RT, _] -> dialyzer_contracts:get_contract_return(C, [RT, any, any])
           end,
 
-      ReturnType = case R of
-                     {_C, Tag, ContractReturnType, _Qualifier} ->
-                       case Tag of
-                         tuple -> get_tuple_return_type(ContractReturnType);
-                         tuple_set -> get_tuple_set_return_type(ContractReturnType);
-                         _ -> any
-                       end;
-                     _ -> R
-                   end,
+      ReturnType = case get_tag(R) of
+        tuple ->
+          Elems = get_elements(R),
+          get_tuple_return_type(Elems);
+        tuple_set ->
+          Elems = get_elements(R),
+          get_tuple_set_return_type(Elems);
+        any -> any;
+        _ -> R
+      end,
+
       ReturnType
             end;
     false -> contract_return_type1(MFA, C)
@@ -3663,15 +3665,16 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module, c
           % If handle_call returns only a single type then it is a tuple
           % If handle_call returns multiple different types then it is a tuple_set
           % ReturnTypesWrapper --> either a single tuple or a list of tuples (tuple_set)
-          ReturnTypes = case ReturnTypesWrapperWrapper of
-                          {_, ReturnTypeTag, ReturnTypesWrapper, _} ->
-                            case ReturnTypeTag of
-                              tuple -> get_tuple_return_type(ReturnTypesWrapper);
-                              tuple_set -> get_tuple_set_return_type(ReturnTypesWrapper);
-                              _ -> any
-                            end;
-                          _ -> any
-                        end,
+          ReturnTypes = case get_tag(ReturnTypesWrapperWrapper) of
+                         tuple ->
+                           Elems = get_elements(ReturnTypesWrapperWrapper),
+                           get_tuple_return_type(Elems);
+                         tuple_set ->
+                           Elems = get_elements(ReturnTypesWrapperWrapper),
+                           get_tuple_set_return_type(Elems);
+                         any -> any;
+                         _ -> any
+                       end,
           ?log("[DATAFLOW(~p)]: Result of success: ~n--InputTypes: ~p~n--ReturnTypes: ~p~n~n", [_UniqueId, InputTypes, ReturnTypes], State),
 
           GenServerInput =
