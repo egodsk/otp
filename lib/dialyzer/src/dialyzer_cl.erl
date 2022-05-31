@@ -373,7 +373,7 @@ do_analysis(Options) ->
   end.
   
 do_analysis(Files, Options, Plt, PltInfo) ->
-  dialyzer_statistics:start(),
+  _ = dialyzer_statistics:start(),
   assert_writable(Options#options.output_plt),
   report_analysis_start(Options),
   State0 = new_state(),
