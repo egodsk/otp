@@ -3548,50 +3548,6 @@ get_tuple_set_return_type(ReturnTypeList) ->
 
 state__fun_info(external, #state{}) ->
   external;
-state__fun_info({M, cast, _Arity} = MFA, #state{plt = PLT, module = Module, callgraph = Callgraph} = State) when M =:= 'gen_server'; M =:= 'Elixir.GenServer' ->
-  case dialyzer_callgraph:get_gen_server_detection(Callgraph) of
-    true ->
-      dialyzer_statistics:dataflow_increment_cast_mfa_lookup(),
-      HandleCastMFA = {Module, handle_cast, 2},
-      case dialyzer_plt:lookup(PLT, HandleCastMFA) of
-        none ->
-          % handle_cast lookup failed in Plt
-          dialyzer_statistics:dataflow_increment_cast_generic(),
-          {MFA,
-            dialyzer_plt:lookup(PLT, MFA),
-            dialyzer_plt:lookup_contract(PLT, MFA),
-            t_any()};
-        {value, {_ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
-          % handle_cast found in Plt
-          % Get the 2 arguments to handle_cast.
-          % E.g. if handle_cast looks like handle_cast({my_server_api, Arg}, _State)
-          % then we are pulling out {my_server_api, Arg}
-          [InputTypes, _] = InputTypesWrapper,
-
-          ReturnTypes = {c, atom, [ok], unknown},
-          GenServerInput = [any, InputTypes],
-
-          Contract = dialyzer_plt:lookup_contract(PLT, HandleCastMFA),
-          NewContract = case Contract of
-                          none ->
-                            Contract;
-                          {value, #contract{args = GenArgs} = C} ->
-                            % contract{
-                            % {value, #contract{contracts = ?, args = first element of current args, forms = ?}}
-                            [RequestType, _] = GenArgs,
-                            NewGenArgs = [any, RequestType],
-
-                            {'value', C#contract{args = NewGenArgs}}
-                        end,
-          % TODO: Check if contract is any here
-          {MFA,
-            {'value', {ReturnTypes, GenServerInput}},
-            NewContract,
-            t_any()}
-      end;
-    false -> state__fun_info1(MFA, State)
-  end;
-
 state__fun_info(Fun, #state{callgraph = CG, fun_tab = FunTab, plt = PLT}) ->
   {Sig, Contract} =
     case dialyzer_callgraph:lookup_name(Fun, CG) of
@@ -3699,6 +3655,49 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module, c
                                 % [ServerRef, Request, Timeout] --> [pid(), {my_api_server, Arg}, ?]
                                 3 -> [any, RequestType, any]
                               end,
+
+                            {'value', C#contract{args = NewGenArgs}}
+                        end,
+          % TODO: Check if contract is any here
+          {MFA,
+            {'value', {ReturnTypes, GenServerInput}},
+            NewContract,
+            t_any()}
+      end;
+    false -> state__fun_info1(MFA, State)
+  end;
+state__fun_info({M, cast, _Arity} = MFA, _As, #state{plt = PLT, module = Module, callgraph = Callgraph} = State) when M =:= 'gen_server'; M =:= 'Elixir.GenServer' ->
+  case dialyzer_callgraph:get_gen_server_detection(Callgraph) of
+    true ->
+      dialyzer_statistics:dataflow_increment_cast_mfa_lookup(),
+      HandleCastMFA = {Module, handle_cast, 2},
+      case dialyzer_plt:lookup(PLT, HandleCastMFA) of
+        none ->
+          % handle_cast lookup failed in Plt
+          dialyzer_statistics:dataflow_increment_cast_generic(),
+          {MFA,
+            dialyzer_plt:lookup(PLT, MFA),
+            dialyzer_plt:lookup_contract(PLT, MFA),
+            t_any()};
+        {value, {_ReturnTypesWrapperWrapper, InputTypesWrapper}} ->
+          % handle_cast found in Plt
+          % Get the 2 arguments to handle_cast.
+          % E.g. if handle_cast looks like handle_cast({my_server_api, Arg}, _State)
+          % then we are pulling out {my_server_api, Arg}
+          [InputTypes, _] = InputTypesWrapper,
+
+          ReturnTypes = {c, atom, [ok], unknown},
+          GenServerInput = [any, InputTypes],
+
+          Contract = dialyzer_plt:lookup_contract(PLT, HandleCastMFA),
+          NewContract = case Contract of
+                          none ->
+                            Contract;
+                          {value, #contract{args = GenArgs} = C} ->
+                            % contract{
+                            % {value, #contract{contracts = ?, args = first element of current args, forms = ?}}
+                            [RequestType, _] = GenArgs,
+                            NewGenArgs = [any, RequestType],
 
                             {'value', C#contract{args = NewGenArgs}}
                         end,
