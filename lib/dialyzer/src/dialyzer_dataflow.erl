@@ -3573,18 +3573,19 @@ state__fun_info({M, call, Arity} = MFA, As, #state{plt = Plt, module = Module, c
       ?log("[DATAFLOW(~p)]: As for data is: ~n~p~n~n", [_UniqueId, As], State),
 
       dialyzer_statistics:dataflow_increment_call_arity_lookup(),
-      [_Pid, InputType | _Rest] = As,
-      LookupTypeTemp = case InputType of
-                         {c, atom, [Atom], _} ->
-                           ?log("[DATAFLOW(~p)]: Plt lookup with arity for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, 1}], State),
-                           dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, 1});
-                         {c, tuple, [{c, atom, [Atom], _} | _] = InputList, _} ->
-                           ?log("[DATAFLOW(~p)]: Plt lookup with arity for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, length(InputList)}], State),
-                           dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
-                         _ ->
-                           ?log("[DATAFLOW(~p)]: No matching input-type for: ~n~p~n~n", [_UniqueId, InputType], State),
-                           none
-                       end,
+      [_Pid, _InputType | _Rest] = As,
+      LookupTypeTemp = none,
+%%      LookupTypeTemp = case InputType of
+%%                         {c, atom, [Atom], _} ->
+%%                           ?log("[DATAFLOW(~p)]: Plt lookup with arity for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, 1}], State),
+%%                           dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, 1});
+%%                         {c, tuple, [{c, atom, [Atom], _} | _] = InputList, _} ->
+%%                           ?log("[DATAFLOW(~p)]: Plt lookup with arity for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, length(InputList)}], State),
+%%                           dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
+%%                         _ ->
+%%                           ?log("[DATAFLOW(~p)]: No matching input-type for: ~n~p~n~n", [_UniqueId, InputType], State),
+%%                           none
+%%                       end,
 
       ?log("[DATAFLOW(~p)]: Result of Plt lookup with arity: ~n~p~n~n", [_UniqueId, LookupTypeTemp], State),
 

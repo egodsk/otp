@@ -1048,31 +1048,32 @@ get_plt_constr_gen_server_handle_call({_, _, Arity} = InputMFA, Dst, ArgVars, St
 
   %% INCREMENT CALL
   dialyzer_statistics:typesig_increment_call_arity_lookup(),
-  [_Pid, InputType | _Rest] = ArgVars,
-  LookupTypeTemp = case get_tag(InputType) of
-           atom ->
-             case length(get_elements(InputType)) of
-               1 ->
-                 [Atom] = get_elements(InputType),
-                 ?log("[TYPESIG(~p)]: Plt lookup with atom only for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, 1}], State),
-                 dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, 1});
-               _ ->
-                 ?log("[TYPESIG(~p)]: Plt lookup unknown type: ~n~p~n~n", [_UniqueId, InputType], State),
-                 none
-             end;
-           tuple ->
-             case get_elements(InputType) of
-               [{c, atom, [Atom], _} | _] = InputList ->
-                 ?log("[TYPESIG(~p)]: Plt lookup with atom and arity for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, length(InputList)}], State),
-                 dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
-               _ ->
-                 ?log("[TYPESIG(~p)]: Plt lookup unknown type: ~n~p~n~n", [_UniqueId, InputType], State),
-                 none
-             end;
-           _ ->
-             ?log("[TYPESIG(~p)]: Plt lookup unknown type: ~n~p~n~n", [_UniqueId, InputType], State),
-             none
-         end,
+  [_Pid, _InputType | _Rest] = ArgVars,
+  LookupTypeTemp = none,
+%%  LookupTypeTemp = case get_tag(InputType) of
+%%           atom ->
+%%             case length(get_elements(InputType)) of
+%%               1 ->
+%%                 [Atom] = get_elements(InputType),
+%%                 ?log("[TYPESIG(~p)]: Plt lookup with atom only for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, 1}], State),
+%%                 dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, 1});
+%%               _ ->
+%%                 ?log("[TYPESIG(~p)]: Plt lookup unknown type: ~n~p~n~n", [_UniqueId, InputType], State),
+%%                 none
+%%             end;
+%%           tuple ->
+%%             case get_elements(InputType) of
+%%               [{c, atom, [Atom], _} | _] = InputList ->
+%%                 ?log("[TYPESIG(~p)]: Plt lookup with atom and arity for: ~n~p~n~n", [_UniqueId, {Module, handle_call, 3, Atom, length(InputList)}], State),
+%%                 dialyzer_plt:lookup(Plt, {Module, handle_call, 3, Atom, length(InputList)});
+%%               _ ->
+%%                 ?log("[TYPESIG(~p)]: Plt lookup unknown type: ~n~p~n~n", [_UniqueId, InputType], State),
+%%                 none
+%%             end;
+%%           _ ->
+%%             ?log("[TYPESIG(~p)]: Plt lookup unknown type: ~n~p~n~n", [_UniqueId, InputType], State),
+%%             none
+%%         end,
 
   ?log("[TYPESIG(~p)]: Result of Plt lookup: ~n~p~n~n", [_UniqueId, LookupTypeTemp], State),
 
